@@ -1,0 +1,146 @@
+"""Families: config-first creation, registration rules, discovery, generated configs."""
+
+{% include "shared/python/_future.jinja" %}
+import sys
+from abc import ABC, abstractmethod
+from typing import Any
+
+import pytest
+from attrs import define
+from pydantic import Field
+
+from nuikit.errors import ConfigError
+from nuikit.registry import (
+    Configurable,
+    ConfigurableFactory,
+    KindConfig,
+    config_files,
+    import_submodules,
+    import_tree,
+)
+
+
+class ShapeConfig(KindConfig):
+    """Config shared by every shape."""
+
+
+@define
+class Shape[C: ShapeConfig](Configurable[C], ABC):
+    """Toy family base."""
+
+    @abstractmethod
+    def area(self) -> float: ...
+
+
+class ShapeFactory(ConfigurableFactory[Shape[Any]]):
+    """Toy family registry."""
+
+    config_group = "shape"
+
+
+class SquareConfig(ShapeConfig):
+    """Square settings."""
+
+    side_m: float = Field(default=1.0, gt=0, description="metres")
+
+
+@ShapeFactory.register("square")
+@define
+class Square(Shape[SquareConfig]):
+    """Toy item."""
+
+    def area(self) -> float:
+        return self.config.side_m**2
+
+
+def test_from_config_validates_against_the_kinds_schema_and_builds_it():
+    square = ShapeFactory.from_config({"kind": "square", "side_m": 2})
+
+    assert (type(square), square.area()) == (Square, 4.0)
+    with pytest.raises(ConfigError, match="registered: square"):
+        ShapeFactory.from_config({"kind": "circle"})
+
+
+def test_items_are_slotted_so_attribute_typos_fail():
+    square = ShapeFactory.from_config({"kind": "square"})
+
+    with pytest.raises(AttributeError):
+        square.sied_m = 3  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def register_twice() -> None:
+    ShapeFactory.register("square")(Square)
+
+
+def register_below_define() -> None:
+    @define
+    @ShapeFactory.register("triangle")
+    class Triangle(Shape[ShapeConfig]):
+        """Decorators in the wrong order."""
+
+        def area(self) -> float:
+            return 0.0
+
+
+def register_outsider() -> None:
+    @ShapeFactory.register("outsider")
+    @define
+    class Outsider:
+        """Not a Shape."""
+
+
+@pytest.mark.parametrize(
+    ("register", "error"),
+    [
+        (register_twice, ValueError),
+        (register_below_define, TypeError),
+        (register_outsider, TypeError),
+    ],
+)
+def test_registration_rejects_mistakes(register, error):
+    with pytest.raises(error):
+        register()
+
+
+def test_subclassed_factory_shares_the_registry():
+    class Shapes(ShapeFactory):
+        """Same family, another name."""
+
+    assert Shapes.get_class("square") is Square
+
+
+def test_import_submodules_imports_every_module(tmp_path, monkeypatch):
+    package = tmp_path / "toy_items"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "a.py").write_text("LOADED = True\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    import_submodules("toy_items")
+
+    assert sys.modules["toy_items.a"].LOADED
+
+
+def test_import_tree_imports_nested_modules_but_not_clis(tmp_path, monkeypatch):
+    package = tmp_path / "toy_tree"
+    for sub in ("", "shapes", "cli"):
+        (package / sub).mkdir(exist_ok=True)
+        (package / sub / "__init__.py").write_text("")
+    (package / "shapes" / "square.py").write_text("")
+    (package / "cli" / "run.py").write_text("")
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    import_tree("toy_tree")
+
+    assert "toy_tree.shapes.square" in sys.modules
+    assert "toy_tree.cli.run" not in sys.modules
+
+
+def test_every_kind_of_a_config_group_gets_a_generated_file():
+    [file] = config_files(ShapeFactory.__module__)
+
+    assert (file.path, file.schema, file.kind) == (
+        "shape/kinds/square.yaml",
+        SquareConfig,
+        "square",
+    )

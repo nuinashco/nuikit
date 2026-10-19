@@ -1,0 +1,63 @@
+"""Run directories: one per run, holding the resolved config and its provenance."""
+
+{% include "shared/python/_future.jinja" %}
+import json
+import subprocess
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+from omegaconf import OmegaConf
+
+from nuikit.config import Schema
+from nuikit.errors import ConfigError
+
+
+def start_run(config: Schema, *, name: str, runs_dir: Path) -> Path:
+    """Create `runs_dir/name/` with config.yaml (secrets masked) and run.json."""
+    run_dir = runs_dir / name
+    try:
+        run_dir.mkdir(parents=True)
+    except FileExistsError as e:
+        raise ConfigError(
+            f"run directory {run_dir} exists; pass another run_name"
+        ) from e
+    snapshot = OmegaConf.to_yaml(config.model_dump(mode="json"))
+    (run_dir / "config.yaml").write_text(snapshot, encoding="utf-8")
+    provenance = json.dumps(_provenance(run_dir), indent=2, ensure_ascii=False)
+    (run_dir / "run.json").write_text(provenance + "\n", encoding="utf-8")
+    return run_dir
+{% if use_wandb %}
+
+
+def mirror_to_wandb(config: Schema, run_dir: Path, *, project: str) -> None:
+    """Start a W&B run named after `run_dir`, with the same config."""
+    import wandb
+
+    wandb.init(
+        project=project,
+        name=run_dir.name,
+        dir=run_dir,
+        config=config.model_dump(mode="json"),
+    )
+{% endif %}
+
+
+def _provenance(run_dir: Path) -> dict[str, object]:
+    status = _git("status", "--porcelain", cwd=run_dir)
+    return {
+        "git_sha": _git("rev-parse", "HEAD", cwd=run_dir),
+        "dirty": None if status is None else bool(status),  # None: not a checkout.
+        "argv": sys.argv,
+        "started_at": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+
+
+def _git(*args: str, cwd: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", *args], capture_output=True, text=True, check=False, cwd=cwd
+        )
+    except OSError:  # `git` is not installed.
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None

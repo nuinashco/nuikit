@@ -1,0 +1,35 @@
+"""Schema.from_hydra turns every config problem into one ConfigError."""
+
+{% include "shared/python/_future.jinja" %}
+import pytest
+from omegaconf import OmegaConf
+from pydantic import PositiveInt, ValidationError
+
+from nuikit.config import Schema
+from nuikit.errors import ConfigError
+
+
+class Toy(Schema):
+    """Config with one constrained field."""
+
+    steps: PositiveInt = 1
+
+
+def test_unknown_and_invalid_fields_are_listed_one_per_line():
+    with pytest.raises(ConfigError) as error:
+        Toy.from_hydra(OmegaConf.create({"steps": 0, "stpes": 2}))
+
+    lines = str(error.value).splitlines()
+    assert [line.split(":")[0].strip() for line in lines[1:]] == ["steps", "stpes"]
+
+
+def test_missing_mandatory_value_is_a_config_error():
+    with pytest.raises(ConfigError, match="steps"):
+        Toy.from_hydra(OmegaConf.create({"steps": "???"}))
+
+
+def test_validated_config_is_read_only():
+    config = Toy.from_hydra(OmegaConf.create({"steps": 3}))
+
+    with pytest.raises(ValidationError):
+        config.steps = 4

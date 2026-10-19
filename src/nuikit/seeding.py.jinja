@@ -1,0 +1,29 @@
+"""Seed every random source once, at the entry point."""
+
+{% include "shared/python/_future.jinja" %}
+import importlib
+import importlib.util
+import os
+import random
+
+import numpy as np
+
+
+def seed_everything(seed: int, *, deterministic: bool = False) -> np.random.Generator:
+    """Seed Python, NumPy and torch (if installed); return a Generator to pass around.
+
+    Code should draw from the returned Generator, not from global state.
+    `deterministic` also forces deterministic torch kernels, which are slower.
+    """
+    random.seed(seed)
+    # Third-party code still draws from NumPy's legacy global RNG.
+    np.random.seed(seed)  # noqa: NPY002
+    if importlib.util.find_spec("torch") is not None:
+        torch = importlib.import_module("torch")
+        torch.manual_seed(seed)  # Seeds every device, CUDA included.
+        if deterministic:
+            # cuBLAS refuses deterministic GEMMs without a fixed workspace.
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+            torch.use_deterministic_algorithms(mode=True)
+            torch.backends.cudnn.benchmark = False
+    return np.random.default_rng(seed)

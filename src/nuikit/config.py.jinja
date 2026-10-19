@@ -1,0 +1,28 @@
+"""Strict, read-only config models validated from Hydra-composed YAML."""
+
+{% include "shared/python/_future.jinja" %}
+from typing import Self
+
+from omegaconf import DictConfig, OmegaConf
+from omegaconf.errors import OmegaConfBaseException
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from nuikit.errors import ConfigError, describe, first_line
+
+
+class Schema(BaseModel):
+    """Base for config models: unknown keys are errors, values are read-only."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @classmethod
+    def from_hydra(cls, cfg: DictConfig) -> Self:
+        """Validate a composed Hydra config; raise ConfigError naming bad fields."""
+        try:
+            data = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
+        except OmegaConfBaseException as e:
+            raise ConfigError(first_line(e)) from e
+        try:
+            return cls.model_validate(data)
+        except ValidationError as e:
+            raise ConfigError(describe(e)) from e

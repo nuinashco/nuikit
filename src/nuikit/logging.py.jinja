@@ -1,0 +1,49 @@
+"""Structured logging: structlog over stdlib, console in a terminal, JSON elsewhere."""
+
+{% include "shared/python/_future.jinja" %}
+import logging
+import sys
+from typing import Literal
+
+import structlog
+
+type LogLevel = Literal["debug", "info", "warning", "error"]
+type LogFormat = Literal["auto", "console", "json"]
+
+
+def configure_logging(*, level: LogLevel = "info", fmt: LogFormat = "auto") -> None:
+    """Route structlog and stdlib loggers through one stderr handler.
+
+    Call once, from the entry point; library code only calls `get_logger()`.
+    """
+    shared: list[structlog.typing.Processor] = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+    ]
+    as_json = fmt == "json" or (fmt == "auto" and not sys.stderr.isatty())
+    rendering: list[structlog.typing.Processor] = (
+        [structlog.processors.dict_tracebacks, structlog.processors.JSONRenderer()]
+        if as_json
+        else [structlog.dev.ConsoleRenderer()]
+    )
+    structlog.configure(
+        processors=[*shared, structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(
+        structlog.stdlib.ProcessorFormatter(
+            foreign_pre_chain=shared,
+            processors=[
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                *rendering,
+            ],
+        )
+    )
+    root = logging.getLogger()
+    root.handlers[:] = [handler]
+    root.setLevel(level.upper())

@@ -1,0 +1,29 @@
+"""Logs from structlog and from stdlib libraries share one JSON renderer."""
+
+{% include "shared/python/_future.jinja" %}
+import json
+import logging
+
+import pytest
+import structlog
+
+from nuikit.logging import configure_logging
+
+
+@pytest.fixture
+def root_logger():
+    root = logging.getLogger()
+    handlers, level = root.handlers[:], root.level
+    yield root
+    root.handlers[:], root.level = handlers, level
+
+
+def test_events_and_foreign_logs_render_as_json_lines(root_logger, capsys):
+    configure_logging(level="info", fmt="json")
+
+    structlog.stdlib.get_logger("app").info("run_started", seed=1)
+    logging.getLogger("thirdparty").warning("plain %s", "message")
+
+    first, second = (json.loads(line) for line in capsys.readouterr().err.splitlines())
+    assert (first["event"], first["seed"], first["level"]) == ("run_started", 1, "info")
+    assert (second["event"], second["logger"]) == ("plain message", "thirdparty")

@@ -1,0 +1,45 @@
+"""The CLI boundary reports user errors briefly and lets bugs crash."""
+
+{% include "shared/python/_future.jinja" %}
+import pytest
+from pydantic import BaseModel, PositiveInt
+
+from nuikit.errors import ConfigError, cli_boundary
+
+
+def test_user_error_becomes_a_message_and_its_exit_code(capsys):
+    @cli_boundary
+    def command() -> None:
+        raise ConfigError("no data; run `make data` first")
+
+    with pytest.raises(SystemExit) as exit_info:
+        command()
+
+    assert exit_info.value.code == ConfigError.exit_code
+    assert capsys.readouterr().err == "error: no data; run `make data` first\n"
+
+
+def test_validation_error_is_a_config_error_with_one_line_per_field(capsys):
+    class Settings(BaseModel):
+        """Toy model."""
+
+        steps: PositiveInt
+
+    @cli_boundary
+    def command() -> None:
+        Settings.model_validate({"steps": 0})
+
+    with pytest.raises(SystemExit) as exit_info:
+        command()
+
+    assert exit_info.value.code == ConfigError.exit_code
+    assert capsys.readouterr().err.splitlines()[1].startswith("  steps: ")
+
+
+def test_bugs_keep_their_traceback():
+    @cli_boundary
+    def command() -> None:
+        raise KeyError("bug")
+
+    with pytest.raises(KeyError):
+        command()

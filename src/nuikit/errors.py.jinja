@@ -1,0 +1,65 @@
+"""User-fixable errors and the CLI boundary that reports them."""
+
+{% include "shared/python/_future.jinja" %}
+import functools
+import sys
+from collections.abc import Callable
+from typing import ClassVar, NoReturn
+
+from omegaconf.errors import OmegaConfBaseException
+from pydantic import ValidationError
+
+
+class UserError(Exception):
+    """Problem the user can fix; the CLI boundary prints it without a traceback."""
+
+    exit_code: ClassVar[int] = 1
+
+
+class ConfigError(UserError):
+    """Invalid, incomplete or stale configuration."""
+
+    exit_code = 2
+
+
+class DataError(UserError):
+    """Missing, stale or malformed input data."""
+
+    exit_code = 3
+
+
+def cli_boundary[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
+    """Report user errors as `error: <message>` on stderr and exit with their code.
+
+    User errors carry their own code; pydantic and OmegaConf errors are config
+    errors. Any other exception is a bug and keeps its traceback.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return fn(*args, **kwargs)
+        except UserError as e:
+            _exit(str(e), e.exit_code, cause=e)
+        except ValidationError as e:
+            _exit(describe(e), ConfigError.exit_code, cause=e)
+        except OmegaConfBaseException as e:
+            _exit(first_line(e), ConfigError.exit_code, cause=e)
+
+    return wrapper
+
+
+def describe(error: ValidationError) -> str:
+    """Return the model name, then one line per invalid field, dotted path first."""
+    lines = [f"  {'.'.join(map(str, e['loc']))}: {e['msg']}" for e in error.errors()]
+    return f"invalid {error.title}:\n" + "\n".join(lines)
+
+
+def first_line(error: OmegaConfBaseException) -> str:
+    """Return an OmegaConf error without the full_key/object_type lines it appends."""
+    return f"invalid config: {str(error).splitlines()[0]}"
+
+
+def _exit(message: str, code: int, *, cause: Exception) -> NoReturn:
+    sys.stderr.write(f"error: {message}\n")
+    raise SystemExit(code) from cause

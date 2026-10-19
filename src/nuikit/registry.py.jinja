@@ -1,0 +1,192 @@
+"""Families of items: one registry per family, config-first creation, discovery."""
+
+{% include "shared/python/_future.jinja" %}
+import importlib
+import pkgutil
+from collections.abc import Callable, Mapping
+from typing import Any, ClassVar, TypeVar, cast, get_args, get_origin
+
+from attrs import define
+
+from nuikit.config import Schema
+from nuikit.configgen import ConfigFile
+from nuikit.errors import ConfigError
+
+
+class KindConfig(Schema):
+    """Config whose `kind` names the registered item to build."""
+
+    kind: str
+
+
+@define
+class Configurable[C: KindConfig]:
+    """Item built from one validated config; its type argument is the config schema.
+
+    `class Square(Shape[SquareConfig])` sets `Square.Config = SquareConfig`, which
+    the factory validates raw data against. The registry stamps `kind`.
+    """
+
+    Config: ClassVar[type[KindConfig]] = KindConfig
+    kind: ClassVar[str]
+
+    config: C
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if "Config" in cls.__dict__:
+            return
+        for base in cls.__dict__.get("__orig_bases__", ()):
+            for arg in get_args(base):
+                if isinstance(arg, type) and issubclass(arg, KindConfig):
+                    cls.Config = arg
+
+
+class BaseFactory[T]:
+    """Registry of one family of items, keyed by `kind`.
+
+    Declare `class XFactory(BaseFactory[Item])`, then decorate items with
+    `@XFactory.register(kind)`. Items register on import, so a family's
+    `items/__init__.py` calls `import_submodules(__name__)`. `@register` must be the
+    outermost decorator, above `@define`: attrs replaces the class, and the registry
+    must hold the final one.
+    """
+
+    _registry: ClassVar[dict[str, type[Any]]]
+    _base_type: ClassVar[type[Any]]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # Own __orig_bases__ only: `class Sub(ConcreteFactory)` must share the parent's
+        # registry, not silently start an empty one.
+        for base in cls.__dict__.get("__orig_bases__", ()):
+            for arg in get_args(base):
+                origin = get_origin(arg) or arg
+                if isinstance(origin, type):
+                    cls._base_type = origin
+                    cls._registry = {}
+                    return
+                if isinstance(arg, TypeVar):
+                    return  # A generic intermediate, e.g. ConfigurableFactory[T].
+        if not hasattr(cls, "_base_type"):
+            name = cls.__name__
+            raise TypeError(
+                f"{name} must name its family: class {name}(BaseFactory[T])"
+            )
+
+    @classmethod
+    def register[I: type](cls, kind: str) -> Callable[[I], I]:
+        """Register the decorated attrs class under `kind` and stamp `kind` on it."""
+
+        def decorator(item: I) -> I:
+            name = f"{cls.__name__}: {item.__name__}"
+            if "__attrs_attrs__" not in item.__dict__:
+                raise TypeError(f"{name} needs @define or @frozen below @register")
+            if not issubclass(item, cls._base_type):
+                raise TypeError(f"{name} must subclass {cls._base_type.__name__}")
+            if kind in cls._registry:
+                raise ValueError(f"{name}: kind '{kind}' is already registered")
+            cast(Any, item).kind = kind
+            cls._registry[kind] = item
+            return item
+
+        return decorator
+
+    @classmethod
+    def get_class(cls, kind: str) -> type[T]:
+        """Return the class registered under `kind`."""
+        if kind not in cls._registry:
+            available = ", ".join(sorted(cls._registry)) or "none registered"
+            family = cls._base_type.__name__.lower()
+            raise ConfigError(
+                f"unknown {family} kind '{kind}'; registered: {available}"
+            )
+        return cls._registry[kind]
+
+    @classmethod
+    def create(cls, kind: str, *args: Any, **kwargs: Any) -> T:
+        """Build the item registered under `kind`."""
+        return cls.get_class(kind)(*args, **kwargs)
+
+    @classmethod
+    def list_registered(cls) -> list[str]:
+        """Return the registered kinds, sorted."""
+        return sorted(cls._registry)
+
+
+class ConfigurableFactory[T: Configurable[Any]](BaseFactory[T]):
+    """Factory of Configurable items: pick the schema by `kind`, validate, build.
+
+    Set `config_group` to generate `configs/<group>/kinds/<kind>.yaml` per kind.
+    """
+
+    config_group: ClassVar[str | None] = None
+
+    @classmethod
+    def validate(cls, data: Mapping[str, Any] | KindConfig) -> KindConfig:
+        """Validate `data` against the Config of the item its `kind` selects."""
+        if isinstance(data, KindConfig):
+            schema = cls.get_class(data.kind).Config
+            return data if isinstance(data, schema) else schema(**data.model_dump())
+        kind = data.get("kind")
+        if not kind:
+            available = ", ".join(cls.list_registered())
+            raise ConfigError(f"config needs a `kind`; registered: {available}")
+        return cls.get_class(kind).Config.model_validate(data)
+
+    @classmethod
+    def from_config(cls, data: Mapping[str, Any] | KindConfig) -> T:
+        """Build the item that `data["kind"]` names, from validated `data`."""
+        config = cls.validate(data)
+        return cls.get_class(config.kind)(config)
+
+
+def import_submodules(package: str) -> None:
+    """Import every module directly inside `package`, so their items register."""
+    module = importlib.import_module(package)
+    for info in pkgutil.iter_modules(module.__path__):
+        importlib.import_module(f"{package}.{info.name}")
+
+
+def import_tree(package: str) -> None:
+    """Import `package` and every module below it except CLIs and `__main__` modules."""
+    root = importlib.import_module(package)
+    cli = f"{package}.cli"
+    for info in pkgutil.walk_packages(getattr(root, "__path__", []), f"{package}."):
+        is_cli = info.name == cli or info.name.startswith(f"{cli}.")
+        if not is_cli and not info.name.endswith(".__main__"):
+            importlib.import_module(info.name)
+
+
+def families(package: str) -> list[type[ConfigurableFactory[Any]]]:
+    """Return the factories of `package` that declare a config_group.
+
+    Imports the whole package first, so a family that nothing imports yet still
+    gets its YAML generated and checked.
+    """
+    import_tree(package)
+    found: list[type[ConfigurableFactory[Any]]] = []
+    pending: list[type[ConfigurableFactory[Any]]] = [
+        *ConfigurableFactory.__subclasses__()
+    ]
+    while pending:
+        factory = pending.pop()
+        pending += factory.__subclasses__()
+        owned = "_registry" in factory.__dict__ and factory.config_group
+        if owned and f"{factory.__module__}.".startswith(f"{package}."):
+            found.append(factory)
+    return sorted(found, key=lambda f: f.__qualname__)
+
+
+def config_files(package: str) -> list[ConfigFile]:
+    """Return `<group>/kinds/<kind>.yaml` for each kind of each `package` family."""
+    return [
+        ConfigFile(kind_path(factory, kind), factory.get_class(kind).Config, kind=kind)
+        for factory in families(package)
+        for kind in factory.list_registered()
+    ]
+
+
+def kind_path(factory: type[ConfigurableFactory[Any]], kind: str) -> str:
+    """Return the generated YAML path of `kind`, relative to the configs directory."""
+    return f"{factory.config_group}/kinds/{kind}.yaml"
