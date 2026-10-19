@@ -21,18 +21,14 @@ class Outer(Schema):
     inner: Inner = Field(default_factory=Inner, description="nested settings")
     optional: Inner | None = Field(default_factory=Inner)
     disabled: Inner | None = None
-    endpoint: str = Field(description="provided by a defaults-list group")
+    endpoint: str = Field(description="provided by a config group")
 
 
 def test_render_writes_defaults_required_markers_comments_and_nested_blocks():
-    text = render(
-        ConfigFile("outer.yaml", Outer, defaults=("_self_", "endpoint: null"))
-    )
+    text = render(ConfigFile("outer.yaml", Outer, groups=("endpoint",)))
 
     assert text.splitlines()[1:] == [
-        "defaults:",
-        "  - _self_",
-        "  - endpoint: null",
+        "# Chosen through config groups, not listed here: endpoint.",
         "",
         "name: ???  # required, no default",
         'tags: ["a"]',
