@@ -34,9 +34,12 @@ def render(file: ConfigFile) -> str:
     lines = [HEADER.format(schema=file.schema.__name__)]
     if file.groups:
         lines.append(GROUPS.format(groups=", ".join(file.groups)))
-    lines.append("")
     values = {"kind": file.kind} if file.kind else {}
-    lines += _spaced(_fields(file.schema, values, indent=0, skip=set(file.groups)))
+    body = list(_spaced(_fields(file.schema, values, indent=0, skip=set(file.groups))))
+    # No separator without a body: end-of-file fixers would strip the trailing blank
+    # line, and the file would then read as stale.
+    if body:
+        lines += ["", *body]
     return "\n".join(lines) + "\n"
 
 

@@ -24,6 +24,12 @@ class Outer(Schema):
     endpoint: str = Field(description="provided by a config group")
 
 
+class Grouped(Schema):
+    """Config whose every field comes from a group."""
+
+    endpoint: str
+
+
 def test_render_writes_defaults_required_markers_comments_and_spaced_nested_blocks():
     text = render(ConfigFile("outer.yaml", Outer, groups=("endpoint",)))
 
@@ -39,6 +45,14 @@ def test_render_writes_defaults_required_markers_comments_and_spaced_nested_bloc
         "  timeout_s: 30.0  # seconds",
         "",
         "disabled: null",
+    ]
+
+
+def test_render_ends_without_a_blank_line_when_groups_give_every_field():
+    text = render(ConfigFile("grouped.yaml", Grouped, groups=("endpoint",)))
+
+    assert text.splitlines()[1:] == [
+        "# Chosen through config groups, not listed here: endpoint.",
     ]
 
 
