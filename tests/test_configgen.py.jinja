@@ -24,7 +24,7 @@ class Outer(Schema):
     endpoint: str = Field(description="provided by a config group")
 
 
-def test_render_writes_defaults_required_markers_comments_and_nested_blocks():
+def test_render_writes_defaults_required_markers_comments_and_spaced_nested_blocks():
     text = render(ConfigFile("outer.yaml", Outer, groups=("endpoint",)))
 
     assert text.splitlines()[1:] == [
@@ -34,8 +34,10 @@ def test_render_writes_defaults_required_markers_comments_and_nested_blocks():
         'tags: ["a"]',
         "inner:  # nested settings",
         "  timeout_s: 30.0  # seconds",
+        "",
         "optional:",
         "  timeout_s: 30.0  # seconds",
+        "",
         "disabled: null",
     ]
 

@@ -36,7 +36,7 @@ def render(file: ConfigFile) -> str:
         lines.append(GROUPS.format(groups=", ".join(file.groups)))
     lines.append("")
     values = {"kind": file.kind} if file.kind else {}
-    lines += _fields(file.schema, values, indent=0, skip=set(file.groups))
+    lines += _spaced(_fields(file.schema, values, indent=0, skip=set(file.groups)))
     return "\n".join(lines) + "\n"
 
 
@@ -82,6 +82,17 @@ def _fields(
             yield from _fields(nested, _as_values(inner), indent=indent + 2)
         else:
             yield f"{pad}{name}: {_scalar(value)}{comment}"
+
+
+def _spaced(lines: Iterable[str]) -> Iterator[str]:
+    """Yield `lines` with a blank line before each key that follows a nested block."""
+    depth = 0
+    for line in lines:
+        indent = len(line) - len(line.lstrip(" "))
+        if indent < depth:
+            yield ""
+        depth = indent
+        yield line
 
 
 def _model(annotation: Any) -> type[BaseModel] | None:
