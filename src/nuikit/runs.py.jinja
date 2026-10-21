@@ -1,9 +1,15 @@
 """Run directories: one per run, holding the resolved config and its provenance."""
 
 {% include "shared/python/_future.jinja" %}
+{% if use_wandb %}
+import atexit
+{% endif %}
 import json
 import subprocess
 import sys
+{% if use_wandb %}
+from collections.abc import Collection, Sequence
+{% endif %}
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -30,16 +36,42 @@ def start_run(config: Schema, *, name: str, runs_dir: Path) -> Path:
 {% if use_wandb %}
 
 
-def mirror_to_wandb(config: Schema, run_dir: Path, *, project: str) -> None:
-    """Start a W&B run named after `run_dir`, with the same config."""
+def mirror_to_wandb(
+    config: Schema,
+    run_dir: Path,
+    *,
+    project: str,
+    job_type: str | None = None,
+    group: str | None = None,
+    tags: Sequence[str] = (),
+    exclude: Collection[str] = (),
+    system_stats: bool = True,
+) -> None:
+    """Start a W&B run named after `run_dir`, with its config but the `exclude` keys.
+
+    `job_type`, `group` and `tags` let the W&B table filter and group runs;
+    `system_stats` False drops the CPU, memory and GPU charts. The run finishes when
+    the process exits.
+    """
     import wandb
 
-    wandb.init(
+    run = wandb.init(
         project=project,
         name=run_dir.name,
         dir=run_dir,
-        config=config.model_dump(mode="json"),
+        job_type=job_type,
+        group=group,
+        tags=list(tags),
+        config={
+            key: value
+            for key, value in config.model_dump(mode="json").items()
+            if key not in exclude
+        },
+        settings=wandb.Settings(x_disable_stats=not system_stats),
     )
+    # Left to W&B's own exit hook, teardown abandons a pending message and logs an
+    # error; hooks run last-registered first, so this one runs before it.
+    atexit.register(run.finish)
 {% endif %}
 
 
