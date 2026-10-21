@@ -140,7 +140,7 @@ def test_every_kind_of_a_config_group_gets_a_generated_file():
     [file] = config_files(ShapeFactory.__module__)
 
     assert (file.path, file.schema, file.kind) == (
-        "shape/kinds/square.yaml",
+        "shape/square.yaml",
         SquareConfig,
         "square",
     )

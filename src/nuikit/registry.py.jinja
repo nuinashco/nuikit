@@ -117,7 +117,8 @@ class BaseFactory[T]:
 class ConfigurableFactory[T: Configurable[Any]](BaseFactory[T]):
     """Factory of Configurable items: pick the schema by `kind`, validate, build.
 
-    Set `config_group` to generate `configs/<group>/kinds/<kind>.yaml` per kind.
+    Set `config_group` to generate `configs/<group>/<kind>.yaml` per kind: the file
+    Hydra selects with `<group>=<kind>`.
     """
 
     config_group: ClassVar[str | None] = None
@@ -179,7 +180,7 @@ def families(package: str) -> list[type[ConfigurableFactory[Any]]]:
 
 
 def config_files(package: str) -> list[ConfigFile]:
-    """Return `<group>/kinds/<kind>.yaml` for each kind of each `package` family."""
+    """Return `<group>/<kind>.yaml` for each kind of each `package` family."""
     return [
         ConfigFile(kind_path(factory, kind), factory.get_class(kind).Config, kind=kind)
         for factory in families(package)
@@ -189,4 +190,4 @@ def config_files(package: str) -> list[ConfigFile]:
 
 def kind_path(factory: type[ConfigurableFactory[Any]], kind: str) -> str:
     """Return the generated YAML path of `kind`, relative to the configs directory."""
-    return f"{factory.config_group}/kinds/{kind}.yaml"
+    return f"{factory.config_group}/{kind}.yaml"
