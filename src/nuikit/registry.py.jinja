@@ -118,10 +118,12 @@ class ConfigurableFactory[T: Configurable[Any]](BaseFactory[T]):
     """Factory of Configurable items: pick the schema by `kind`, validate, build.
 
     Set `config_group` to generate `configs/<group>/<kind>.yaml` per kind: the file
-    Hydra selects with `<group>=<kind>`.
+    Hydra selects with `<group>=<kind>`. With `multiple`, several kinds are selected
+    at once (`<group>=[a,b]`), each at its own key `<group>.<kind>`.
     """
 
     config_group: ClassVar[str | None] = None
+    multiple: ClassVar[bool] = False
 
     @classmethod
     def validate(cls, data: Mapping[str, Any] | KindConfig) -> KindConfig:
@@ -182,7 +184,12 @@ def families(package: str) -> list[type[ConfigurableFactory[Any]]]:
 def config_files(package: str) -> list[ConfigFile]:
     """Return `<group>/<kind>.yaml` for each kind of each `package` family."""
     return [
-        ConfigFile(kind_path(factory, kind), factory.get_class(kind).Config, kind=kind)
+        ConfigFile(
+            kind_path(factory, kind),
+            factory.get_class(kind).Config,
+            kind=kind,
+            package=kind_package(factory, kind) if factory.multiple else None,
+        )
         for factory in families(package)
         for kind in factory.list_registered()
     ]
@@ -191,3 +198,8 @@ def config_files(package: str) -> list[ConfigFile]:
 def kind_path(factory: type[ConfigurableFactory[Any]], kind: str) -> str:
     """Return the generated YAML path of `kind`, relative to the configs directory."""
     return f"{factory.config_group}/{kind}.yaml"
+
+
+def kind_package(factory: type[ConfigurableFactory[Any]], kind: str) -> str:
+    """Return the config key a selected `kind` lands at: `<group>.<kind>`, dotted."""
+    return f"{factory.config_group}/{kind}".replace("/", ".")

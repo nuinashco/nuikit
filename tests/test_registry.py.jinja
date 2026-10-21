@@ -139,8 +139,18 @@ def test_import_tree_imports_nested_modules_but_not_clis(tmp_path, monkeypatch):
 def test_every_kind_of_a_config_group_gets_a_generated_file():
     [file] = config_files(ShapeFactory.__module__)
 
-    assert (file.path, file.schema, file.kind) == (
+    assert (file.path, file.schema, file.kind, file.package) == (
         "shape/square.yaml",
         SquareConfig,
         "square",
+        None,
     )
+
+
+def test_a_multiple_family_places_each_kind_at_its_own_key(monkeypatch):
+    monkeypatch.setattr(ShapeFactory, "multiple", True)
+    monkeypatch.setattr(ShapeFactory, "config_group", "eval/shape")
+
+    [file] = config_files(ShapeFactory.__module__)
+
+    assert (file.path, file.package) == ("eval/shape/square.yaml", "eval.shape.square")
