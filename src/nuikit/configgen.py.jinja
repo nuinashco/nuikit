@@ -25,7 +25,8 @@ class ConfigFile:
 
     path: str  # Relative to the configs directory.
     schema: type[Schema]
-    groups: tuple[str, ...] = ()  # Fields that config groups provide; left out.
+    # Config groups whose fields are left out; `bo/surrogate` is `bo.surrogate`.
+    groups: tuple[str, ...] = ()
     kind: str | None = None  # Fixed `kind` value of a family item's config.
 
 
@@ -73,8 +74,9 @@ def _fields(
     skip: set[str] | None = None,
 ) -> Iterator[str]:
     pad = " " * indent
+    skip = skip or set()
     for name, field in schema.model_fields.items():
-        if skip and name in skip:
+        if name in skip:
             continue
         comment = f"  # {field.description}" if field.description else ""
         value = values.get(name, _default(field))
@@ -82,7 +84,9 @@ def _fields(
         if nested is not None and value is not None:
             yield f"{pad}{name}:{comment}"
             inner = value if isinstance(value, BaseModel) else None
-            yield from _fields(nested, _as_values(inner), indent=indent + 2)
+            prefix = f"{name}/"
+            below = {g.removeprefix(prefix) for g in skip if g.startswith(prefix)}
+            yield from _fields(nested, _as_values(inner), indent=indent + 2, skip=below)
         else:
             yield f"{pad}{name}: {_scalar(value)}{comment}"
 

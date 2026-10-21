@@ -30,6 +30,19 @@ class Grouped(Schema):
     endpoint: str
 
 
+class Search(Schema):
+    """Nested block that a group fills in part."""
+
+    endpoint: str
+    batch_size: int = 4
+
+
+class Nested(Schema):
+    """Config with a group inside a nested block."""
+
+    search: Search
+
+
 def test_render_writes_defaults_required_markers_comments_and_spaced_nested_blocks():
     text = render(ConfigFile("outer.yaml", Outer, groups=("endpoint",)))
 
@@ -53,6 +66,17 @@ def test_render_ends_without_a_blank_line_when_groups_give_every_field():
 
     assert text.splitlines()[1:] == [
         "# Chosen through config groups, not listed here: endpoint.",
+    ]
+
+
+def test_render_leaves_out_a_group_inside_a_nested_block():
+    text = render(ConfigFile("nested.yaml", Nested, groups=("search/endpoint",)))
+
+    assert text.splitlines()[1:] == [
+        "# Chosen through config groups, not listed here: search/endpoint.",
+        "",
+        "search:",
+        "  batch_size: 4",
     ]
 
 
