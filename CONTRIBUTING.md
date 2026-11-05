@@ -45,8 +45,9 @@ plugin/               the Claude Code plugin `nuikit`
 
 ## Changing nuikit
 
-- The public API is every module and name in README's table. Keep it stable: a rename or a changed signature is a
-  breaking change, and until 1.0 a breaking change bumps the minor version (semver).
+- The public API is every module-level name without a leading underscore in the seven modules, and README's table
+  lists all of them. Keep it stable: a rename or a changed signature is a breaking change, and until 1.0 a breaking
+  change bumps the minor version (semver). A new public name gets a place in that table.
 - A rule change edits `docs/guide.md`, the code and tests its *Check* names, and the skills that show the pattern,
   in the same commit. Keep the rule ID and never reuse a retired one.
 - A change to what a skill template produces runs `make test`: `tests/test_plugin.py` renders the family templates

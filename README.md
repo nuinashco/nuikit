@@ -26,10 +26,10 @@ the requirement names a pre-release. torch is optional: `seed_everything` seeds 
 | module | gives |
 |---|---|
 | `nuikit.config` | `Schema`, a pydantic base that rejects unknown keys and freezes values; `Schema.from_hydra(cfg)` validates a composed Hydra config and raises one `ConfigError` naming every bad field |
-| `nuikit.configgen` | `ConfigFile`, `render`, `stale`, `write`: the YAML mirror of a schema, every field with its default and description |
-| `nuikit.registry` | `KindConfig`, `Configurable`, `ConfigurableFactory`: families whose items register by `kind` and build from config; `import_submodules`, `import_tree`, `families`, `config_files`, `kind_path`, `kind_package` for discovery and generated configs |
-| `nuikit.errors` | `UserError`, `ConfigError` (exit 2), `DataError` (exit 3), and `@cli_boundary`, which prints `error: <message>` and exits with the code |
-| `nuikit.logging` | `configure_logging(level=..., fmt=...)`: structlog over stdlib, console on a terminal, JSON elsewhere |
+| `nuikit.configgen` | `ConfigFile`, `render`, `stale`, `write`: the YAML mirror of a schema, every field with its default and description; `HEADER`, `PACKAGE`, `GROUPS`, `REQUIRED`: the comment lines and `???` marker it writes |
+| `nuikit.registry` | `KindConfig`, `Configurable`, `ConfigurableFactory` (over `BaseFactory`, a registry keyed by `kind`): families whose items register by `kind` and build from config; `import_submodules`, `import_tree`, `families`, `config_files`, `kind_path`, `kind_package` for discovery and generated configs |
+| `nuikit.errors` | `UserError`, `ConfigError` (exit 2), `DataError` (exit 3), and `@cli_boundary`, which prints `error: <message>` and exits with the code; `describe` and `first_line` word pydantic and OmegaConf errors the way it prints them |
+| `nuikit.logging` | `configure_logging(level=..., fmt=...)`: structlog over stdlib, console on a terminal, JSON elsewhere; `LogLevel` and `LogFormat`, the literal types of `level` and `fmt`, for config fields |
 | `nuikit.runs` | `start_run`: `runs/<name>/` with `config.yaml` (secrets masked) and `run.json` (git SHA, dirty flag, argv, start time); `mirror_to_wandb`, with the `wandb` extra |
 | `nuikit.seeding` | `seed_everything(seed, deterministic=...)`: seeds Python, NumPy and torch, and returns the `np.random.Generator` to pass around |
 
@@ -101,8 +101,9 @@ user settings; projects from the rnd template already enable it in `.claude/sett
 
 ## Release
 
-Versions follow semver, and the public API is every name in the table above. To release, set `version` in
-`pyproject.toml`, run `uv lock`, commit, then push the tag:
+Versions follow semver. The public API is every module-level name without a leading underscore in the seven modules
+above, all of them listed in the table. To release, set `version` in `pyproject.toml`, run `uv lock`, commit, then
+push the tag:
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0
