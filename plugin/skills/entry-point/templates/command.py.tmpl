@@ -1,0 +1,40 @@
+"""`<cli>-<command>`: <what one invocation does, in one line>.
+
+Usage:
+
+    <cli>-<command>                          # configs/<command>.yaml as it is
+    <cli>-<command> seed=1 run_name=trial    # Hydra overrides
+
+Writes runs/RUN_NAME/ with the resolved config, its provenance and <the outputs>.
+"""
+
+from __future__ import annotations
+
+import hydra
+import rootutils
+import structlog
+from omegaconf import DictConfig
+
+from nuikit import runs, seeding
+from nuikit.errors import cli_boundary
+from nuikit.logging import configure_logging
+
+from <pkg> import paths
+from <pkg>.config import <Command>Config
+
+# Loads .env and sets PROJECT_ROOT for ${oc.env:...} in configs.
+rootutils.setup_root(__file__, indicator=".project-root")
+
+log = structlog.stdlib.get_logger()
+
+
+@hydra.main(config_path=str(paths.CONFIGS_DIR), config_name="<command>")
+@cli_boundary
+def main(dict_cfg: DictConfig) -> None:
+    cfg = <Command>Config.from_hydra(dict_cfg)
+    configure_logging(level=cfg.log_level, fmt=cfg.log_format)
+    rng = seeding.seed_everything(cfg.seed, deterministic=cfg.deterministic)
+    <build items from cfg and check inputs, before any expensive work>
+    run_dir = runs.start_run(cfg, name=cfg.run_name, runs_dir=paths.RUNS_DIR)
+    <do the work with rng, writing outputs into run_dir>
+    log.info("<command>_finished", run_dir=str(run_dir))

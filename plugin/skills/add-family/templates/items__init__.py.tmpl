@@ -1,0 +1,7 @@
+"""`<group>` kinds, one module each; importing this package registers them all."""
+
+from __future__ import annotations
+
+from nuikit.registry import import_submodules
+
+import_submodules(__name__)
