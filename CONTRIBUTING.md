@@ -77,8 +77,6 @@ Tag a commit on `main` whose `pyproject.toml` has the same version: `git tag v0.
 
 - Tests sit at `tests/test_<module>.py`, not `tests/nuikit/test_<module>.py` (TST-4): with one package, the extra
   level would say nothing.
-- The Makefile has no `configs` or `test-integration` target (LAY-6): nuikit has no configs and no end-to-end tests
-  of its own; it adds `build`.
 
 ## Commits
 
