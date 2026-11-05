@@ -8,7 +8,7 @@ The other rule IDs live elsewhere:
 
 - [nuinashco/conventions](https://github.com/nuinashco/conventions) (`GUIDE.md`), the rules for every Python repo:
   LAY-1..LAY-3, LAY-5, LAY-6, ARC, TYP, STY, DOC, ERR-3..ERR-6, LOG-2, LOG-4, LOG-5, TST-1..TST-4, TST-6..TST-8,
-  RDOC, GIT and TOOL. It also says how to read a rule and lists the retired IDs.
+  RDOC, GIT, TOOL-1, TOOL-2 and TOOL-4..TOOL-6. It also says how to read a rule and lists the retired IDs.
 - [nuinashco/rnd-template](https://github.com/nuinashco/rnd-template), the project layout built on nuikit: LAY-4,
   LAY-7, ENV-1..ENV-3, TST-5, RUN-3..RUN-7 and TOOL-3.
 
