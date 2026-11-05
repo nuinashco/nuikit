@@ -5,9 +5,10 @@ from them, families of interchangeable items chosen by `kind`, user errors with 
 directories with provenance, and seeding. Projects from
 [nuinashco/rnd-template](https://github.com/nuinashco/rnd-template) are built on it.
 
-The rules for code that uses it are in [docs/guide.md](docs/guide.md); the general conventions are in
+The rules for code that uses it are in
+[docs/guide.md](https://github.com/nuinashco/nuikit/blob/main/docs/guide.md); the general conventions are in
 [nuinashco/conventions](https://github.com/nuinashco/conventions). Changing nuikit itself:
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md](https://github.com/nuinashco/nuikit/blob/main/CONTRIBUTING.md).
 
 ## Install
 
@@ -85,7 +86,8 @@ ShapeFactory.from_config({"kind": "square", "side_m": 2}).area()  # 4.0
 
 ## Claude Code plugin
 
-`plugin/` is the `nuikit` plugin: skills that write code the way [docs/guide.md](docs/guide.md) asks.
+`plugin/` is the `nuikit` plugin: skills that write code the way
+[docs/guide.md](https://github.com/nuinashco/nuikit/blob/main/docs/guide.md) asks.
 
 | skill | use it to |
 |---|---|
