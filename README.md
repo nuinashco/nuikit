@@ -14,12 +14,15 @@ The rules for code that uses it are in [docs/guide.md](docs/guide.md); the gener
 Python 3.12 or later.
 
 ```bash
-uv add nuikit                 # or nuikit[wandb] to mirror runs to Weights & Biases
+uv add nuikit "hydra-core>=1.4.0rc1"   # or nuikit[wandb] to mirror runs to Weights & Biases
 uv add "nuikit @ git+https://github.com/nuinashco/nuikit@v0.1.0"   # a tag, straight from GitHub
+pip install nuikit
 ```
 
-nuikit needs `hydra-core>=1.4.0rc1`, a pre-release, because 1.3.x crashes on Python 3.14; uv and pip take it because
-the requirement names a pre-release. torch is optional: `seed_everything` seeds it when it is installed.
+nuikit needs `hydra-core>=1.4.0rc1`, a pre-release, because 1.3.x crashes on Python 3.14. pip accepts it through
+nuikit's own requirement. uv takes a pre-release only when your project names it, or when nuikit comes from a git or
+path source, so list `hydra-core>=1.4.0rc1` in your own dependencies, as projects from the rnd template do. torch is
+optional: `seed_everything` seeds it when it is installed.
 
 ## Modules
 
