@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Ivan Havlytskyi", email = "ivan.havlytskyi@gmail.com" }]
-requires-python = ">=3.12"
+requires-python = ">=3.12"  # A library: projects on Python 3.12 and 3.13 depend on it too.
 classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
