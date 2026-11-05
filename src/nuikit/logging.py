@@ -1,6 +1,7 @@
 """Structured logging: structlog over stdlib, console in a terminal, JSON elsewhere."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import logging
 import sys
 from typing import Literal

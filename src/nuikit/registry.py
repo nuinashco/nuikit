@@ -1,6 +1,7 @@
 """Families of items: one registry per family, config-first creation, discovery."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import importlib
 import pkgutil
 from collections.abc import Callable, Mapping

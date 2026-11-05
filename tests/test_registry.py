@@ -1,6 +1,7 @@
 """Families: config-first creation, registration rules, discovery, generated configs."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import sys
 from abc import ABC, abstractmethod
 from typing import Any

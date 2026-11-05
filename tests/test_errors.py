@@ -1,6 +1,7 @@
 """The CLI boundary reports user errors briefly and lets bugs crash."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import pytest
 from pydantic import BaseModel, PositiveInt
 

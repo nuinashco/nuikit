@@ -1,6 +1,7 @@
 """A run directory records the resolved config, secrets masked, and provenance."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import json
 
 import pytest

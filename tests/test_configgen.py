@@ -1,6 +1,7 @@
 """Generated YAML lists every field with its default and description."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 from pydantic import Field
 
 from nuikit.config import Schema

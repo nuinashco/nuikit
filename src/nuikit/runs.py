@@ -1,15 +1,12 @@
 """Run directories: one per run, holding the resolved config and its provenance."""
 
-{% include "shared/python/_future.jinja" %}
-{% if use_wandb %}
+from __future__ import annotations
+
 import atexit
-{% endif %}
 import json
 import subprocess
 import sys
-{% if use_wandb %}
 from collections.abc import Collection, Sequence
-{% endif %}
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -33,7 +30,6 @@ def start_run(config: Schema, *, name: str, runs_dir: Path) -> Path:
     provenance = json.dumps(_provenance(run_dir), indent=2, ensure_ascii=False)
     (run_dir / "run.json").write_text(provenance + "\n", encoding="utf-8")
     return run_dir
-{% if use_wandb %}
 
 
 def mirror_to_wandb(
@@ -75,7 +71,6 @@ def mirror_to_wandb(
     # Left to W&B's own exit hook, teardown abandons a pending message and logs an
     # error; hooks run last-registered first, so this one runs before it.
     atexit.register(run.finish)
-{% endif %}
 
 
 def _provenance(run_dir: Path) -> dict[str, object]:

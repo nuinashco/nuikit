@@ -1,6 +1,7 @@
 """One seed makes Python, NumPy and the returned Generator repeatable."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import random
 
 import numpy as np

@@ -1,6 +1,7 @@
 """Logs from structlog and from stdlib libraries share one JSON renderer."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import json
 import logging
 

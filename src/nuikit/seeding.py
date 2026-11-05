@@ -1,6 +1,7 @@
 """Seed every random source once, at the entry point."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import importlib
 import importlib.util
 import os

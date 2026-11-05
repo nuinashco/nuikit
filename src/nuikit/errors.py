@@ -1,6 +1,7 @@
 """User-fixable errors and the CLI boundary that reports them."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import functools
 import sys
 from collections.abc import Callable
