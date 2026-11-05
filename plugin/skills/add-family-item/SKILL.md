@@ -20,6 +20,8 @@ implement. Fill every `<...>` in the templates next to this file; drop `from __f
 
 | placeholder | is | example |
 |---|---|---|
+| `<pkg>`, `<family>`, `<Family>`, `<group>` | the family's names, as `base.py` spells them | `toy`, `samplers`, `Sampler`, `sampler` |
+| `<method>`, `<Result>` | the abstract method to implement, and its return type | `draw`, `np.ndarray` |
 | `<kind>`, `<Kind>` | the kind, snake_case and CapWords | `sobol`, `Sobol` |
 | `<setting>: <type> = <default>` | its settings, one line each | `scramble: bool = True` |
 
@@ -34,13 +36,15 @@ implement. Fill every `<...>` in the templates next to this file; drop `from __f
 2. Settings go on `<Kind><Family>Config`, each with a default unless none is sensible (then no default, `???` in YAML,
    CFG-4). Add a `Field(description=...)` only for what the name, type and default leave open, per the
    `add-config-field` skill. Numbers with units take a suffix: `timeout_s`, `size_mb` (STY-6).
-3. Implement the abstract methods from `self.config`. Randomness comes in as an `np.random.Generator` argument, and
-   no tunable value is a constant in code (RUN-2, CFG-7). If the kind lacks a feature others have, set the base's
-   capability `ClassVar[bool]` rather than letting callers test the kind (ARC-4).
+3. Implement the abstract methods with the base's signatures, reading settings from `self.config`. Randomness comes
+   in as an `np.random.Generator` argument, and no tunable value is a constant in code (RUN-2, CFG-7). If the kind
+   lacks a feature others have, set the base's capability `ClassVar[bool]` rather than letting callers test the kind
+   (ARC-4).
 4. `make configs` writes `configs/<group>/<kind>.yaml`; the invariant tests build every kind from it. A preset of this
    kind (same kind, other values) is a hand-written file in the group that composes the mirror and never takes a
    kind's name (CFG-3).
 5. `templates/test_item.py.tmpl` -> `tests/<pkg>/<family>/test_<kind>.py`: one sentence-named test per behaviour the
    kind adds, built through `<Family>Factory.from_config` as users build it, with fakes for collaborators (TST-1,
-   TST-3). Building from the generated YAML is already the invariant tests' job.
+   TST-3); a method that takes an `rng` gets `np.random.default_rng(0)`. Building from the generated YAML is already
+   the invariant tests' job.
 6. `make check`.

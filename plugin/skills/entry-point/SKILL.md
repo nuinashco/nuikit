@@ -48,8 +48,8 @@ Hydra serves commands that take a config; a small utility without one is a `clic
 4. Register it in `pyproject.toml`: `[project.scripts]` `<cli>-<command> = "<pkg>.cli.<command>:main"`, then
    `uv sync`. Add it to README's command table.
 5. `make configs`; the invariant tests compose and validate the new entry config.
-6. Test the logic in the domain modules it wires. A test of the command itself composes the config and calls `main`
-   in process:
+6. Test the logic in the domain modules it wires. A test of the command itself,
+   `tests/<pkg>/cli/test_<command>.py`, composes the config and calls `main` in process:
 
    ```python
    from hydra import compose, initialize_config_dir
