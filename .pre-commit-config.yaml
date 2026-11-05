@@ -51,7 +51,7 @@ repos:
         language: system
         types: [python]
       - id: check-conventions
-        name: code rules an AST can decide (LAY, ARC, FAM, TYP, STY, ERR, LOG, TST)
+        name: code rules an AST can decide (LAY, ARC, FAM, ENV, TYP, STY, ERR, LOG, TST)
         entry: uv run check-conventions
         language: system
         types: [python]
