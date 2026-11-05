@@ -41,6 +41,7 @@ plugin/               the Claude Code plugin `nuikit`
   .claude-plugin/     plugin.json, without a version, so installs follow commits
   skills/<name>/      SKILL.md, plus templates/*.tmpl with <placeholders> to fill
 .github/workflows/    ci.yml: `make check` on Python 3.12 and 3.14; release.yml: tags to PyPI
+.claude/settings.json the conventions and nuikit plugins enabled, Claude's commit trailer off (GIT-2)
 ```
 
 ## Changing nuikit
