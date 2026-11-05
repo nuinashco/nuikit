@@ -40,4 +40,5 @@ def test_auto_format_is_console_on_a_terminal_and_json_elsewhere(
 
     structlog.stdlib.get_logger("app").info("run_started")
 
-    assert capsys.readouterr().err.startswith("{") == as_json
+    err = capsys.readouterr().err
+    assert ("run_started" in err, err.startswith("{")) == (True, as_json)
