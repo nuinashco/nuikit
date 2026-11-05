@@ -35,7 +35,8 @@ optional.
 
 ```text
 src/nuikit/           the library, one module per concern; py.typed ships its types
-tests/                one test module per library module; test_plugin.py renders the skill templates
+tests/                one test module per library module; test_plugin.py renders the skill templates;
+                      conftest.py holds the fakes
 docs/guide.md         FAM, CFG, ERR-1, ERR-2, LOG-1, LOG-3, RUN-1, RUN-2: the rules for code that uses nuikit
 plugin/               the Claude Code plugin `nuikit`
   .claude-plugin/     plugin.json, without a version, so installs follow commits
@@ -64,8 +65,8 @@ make test     # unit tests, under a second
 make check    # ruff, import layers, pyright, pytest: what CI runs
 ```
 
-Fakes, not mocks: `tests/test_runs.py` swaps `wandb` for an in-process fake module. Each case covers a distinct
-behaviour, named as a sentence.
+Fakes, not mocks, and they live in `tests/conftest.py`: its `fake_wandb` fixture swaps `wandb` for an in-process
+fake module. Each case covers a distinct behaviour, named as a sentence.
 
 ## Release
 

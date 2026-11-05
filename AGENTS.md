@@ -32,6 +32,6 @@ make build        # sdist and wheel into dist/
 
 - `src/nuikit/`: `config`, `configgen`, `registry`, `errors`, `logging`, `runs`, `seeding`; the layers contract in
   `pyproject.toml` fixes which may import which.
-- `tests/`: one module per library module, plus `test_plugin.py` for the skills.
+- `tests/`: one module per library module, plus `test_plugin.py` for the skills; fakes live in `conftest.py`.
 - `docs/guide.md`: the nuikit rules. `plugin/`: `.claude-plugin/plugin.json` and `skills/<name>/SKILL.md`.
 - Releases are tags `vX.Y.Z` matching `version` in `pyproject.toml`; `release.yml` publishes them to PyPI.
