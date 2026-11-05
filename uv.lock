@@ -525,6 +525,7 @@ dependencies = [
     { name = "numpy" },
     { name = "omegaconf" },
     { name = "pydantic" },
+    { name = "pydantic-core" },
     { name = "structlog" },
 ]
 
@@ -551,6 +552,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.5" },
     { name = "omegaconf", specifier = ">=2.4" },
     { name = "pydantic", specifier = ">=2.14" },
+    { name = "pydantic-core" },
     { name = "structlog", specifier = ">=26.1" },
     { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.31" },
 ]
