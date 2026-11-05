@@ -75,7 +75,7 @@ def register_twice() -> None:
 
 def register_below_define() -> None:
     @define
-    @ShapeFactory.register("triangle")
+    @ShapeFactory.register("triangle")  # conventions: FAM-2 - wrong order on purpose.
     class Triangle(Shape[ShapeConfig]):
         """Decorators in the wrong order."""
 

@@ -24,6 +24,7 @@ def seed_everything(seed: int, *, deterministic: bool = False) -> np.random.Gene
         torch.manual_seed(seed)  # Seeds every device, CUDA included.
         if deterministic:
             # cuBLAS refuses deterministic GEMMs without a fixed workspace.
+            # conventions: ENV-3 - cuBLAS reads this setting from the environment.
             os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
             torch.use_deterministic_algorithms(mode=True)
             torch.backends.cudnn.benchmark = False

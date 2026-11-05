@@ -1,0 +1,111 @@
+[project]
+name = "nuikit"
+version = "0.1.0"
+description = "Config schemas, families, CLI errors, logging, run directories and seeding for Hydra projects"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ivan Havlytskyi", email = "ivan.havlytskyi@gmail.com" }]
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+dependencies = [
+    "attrs>=26.1",
+    "hydra-core>=1.4.0rc1",  # 1.3.x crashes on Python 3.14 (argparse help check).
+    "numpy>=2.5",
+    "omegaconf>=2.4",
+    "pydantic>=2.14",  # Also provides `pydantic_core`, pinned to the matching release.
+    "structlog>=26.1",
+]
+
+[project.optional-dependencies]
+wandb = ["wandb>=0.31"]
+
+[project.urls]
+Repository = "https://github.com/nuinashco/nuikit"
+Conventions = "https://github.com/nuinashco/conventions"
+
+[dependency-groups]
+dev = [
+    "conventions-hooks",
+    "import-linter>=2.15",
+    "pre-commit>=4.7",
+    "pyright[nodejs]>=1.1.414",
+    "pytest>=9.1",
+    "ruff>=0.17",
+    "wandb>=0.31",  # Lets pyright check `mirror_to_wandb`; users get it from the extra.
+]
+
+[tool.uv.sources]
+# Main until the conventions repo tags a release; then pin the tag.
+conventions-hooks = { git = "https://github.com/nuinashco/conventions", branch = "main" }
+
+[build-system]
+requires = ["uv_build>=0.12,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "nuikit"
+
+[tool.conventions]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W", "I", "B", "UP", "SIM", "RET", "PTH", "C4", "C90", "RUF", "TID",
+    "FBT", "N", "PERF", "G", "LOG", "BLE", "PL", "D", "NPY", "ERA", "T20",
+    "TD004", "TD005", "TD006", "TD007",  # A TODO says what and why (DOC-6).
+    "D401",  # The google convention drops imperative mood; selecting it restores it.
+    "FA",
+]
+ignore = [
+    "PLC0415",  # Lazy imports of heavy or optional dependencies are deliberate.
+    "PLR2004",  # Thresholds and shapes read better inline than as constants.
+    "PLR0913",  # Config-heavy constructors take many keyword arguments.
+    "D102", "D103", "D105", "D106", "D107",  # Document methods only when non-obvious.
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.isort]
+known-first-party = ["nuikit"]
+required-imports = ["from __future__ import annotations"]  # Runs on Python 3.12.
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"unittest.mock".msg = "use an in-process fake instead (TST-3)"
+
+[tool.pyright]
+include = ["src", "tests"]
+strict = ["src"]
+typeCheckingMode = "standard"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib", "--strict-markers"]
+
+[tool.importlinter]
+root_packages = ["nuikit"]
+
+[[tool.importlinter.contracts]]
+name = "Layers: registry on top, errors, logging and seeding at the bottom"
+type = "layers"
+containers = ["nuikit"]
+layers = ["registry", "configgen | runs", "config", "errors | logging | seeding"]
+exhaustive = true
