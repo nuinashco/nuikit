@@ -8,8 +8,8 @@ that name its API.
 
 ```mermaid
 flowchart TD
-    registry["registry<br/>families, discovery, generated config files"]:::pure
-    configgen["configgen<br/>render schemas to YAML, rewrite stale files"]:::pure
+    registry["registry<br/>families, discovery by import, generated config files"]:::side
+    configgen["configgen<br/>render schemas to YAML, rewrite stale files"]:::side
     runs["runs<br/>run directories, W&B mirror"]:::side
     config["config<br/>Schema, from_hydra"]:::pure
     errors["errors<br/>UserError family, cli_boundary"]:::side
