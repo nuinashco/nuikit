@@ -128,8 +128,9 @@ def test_item_test_template_passes_against_the_rendered_family(skills, family):
             ["test_sample_records_its_config_in_the_run_directory"],
         ),
     ],
+    ids=["command", "test"],
 )
-def test_entry_point_template_is_python_that_ruff_takes_once_filled(
+def test_entry_point_template_is_python_with_docstring_and_future_import_once_filled(
     skills, template, functions
 ):
     path = skills / "entry-point" / "templates" / template

@@ -30,7 +30,7 @@ def start_run(config: Schema, *, name: str, runs_dir: Path) -> Path:
     run_dir = runs_dir / name
     if not run_dir.resolve().is_relative_to(runs_dir.resolve()):
         raise ConfigError(
-            f"run name {name} leaves {runs_dir}; pass a relative run_name without `..`"
+            f"run name {name} leaves {runs_dir}; pass a run_name that stays inside it"
         )
     try:
         run_dir.mkdir(parents=True)
@@ -101,7 +101,7 @@ def _masked(argv: Sequence[str], config: Schema) -> list[str]:
     """Return `argv` with the value of each `key=value` that gives a secret masked.
 
     A key gives a secret when, after Hydra's leading `+`, `++` or `~`, it is the dotted
-    path of a secret in `config` or ends in the name of a field that holds one. So
+    path of a secret in `config` or has a segment that names a field that holds one. So
     does a key above such a path whose value is a mapping.
     """
     secrets = list(_secrets(config))
@@ -113,7 +113,7 @@ def _masked(argv: Sequence[str], config: Schema) -> list[str]:
         key = typed_key.lstrip("+~")
         gives_secret = (
             key in paths
-            or key.rpartition(".")[2] in fields
+            or not fields.isdisjoint(key.split("."))
             or ("{" in value and any(path.startswith(f"{key}.") for path in paths))
         )
         masked.append(f"{typed_key}={_MASK}" if equals and gives_secret else arg)
@@ -126,18 +126,16 @@ def _secrets(
     """Yield the dotted path of each secret at or below `value`, and its field's name.
 
     The field is the innermost schema field on the path: the one that holds the secret,
-    directly or inside mappings and sequences. A field typed for a secret counts while
-    it is None too: `~key=value` deletes a setting only when `value` is what it held.
+    directly or inside mappings and sequences. A field typed for a secret counts
+    whatever it holds: the config no longer holds what `~key=value` deleted.
     """
     if isinstance(value, SecretStr):
         yield ".".join(path), field
     elif isinstance(value, BaseModel):
         for name, info in type(value).model_fields.items():
-            item = getattr(value, name)
-            if item is None and _typed_secret(info.annotation):
+            if _typed_secret(info.annotation):
                 yield ".".join((*path, name)), name
-            else:
-                yield from _secrets(item, path=(*path, name), field=name)
+            yield from _secrets(getattr(value, name), path=(*path, name), field=name)
     elif isinstance(value, Mapping):
         for key, item in cast(Mapping[object, object], value).items():
             yield from _secrets(item, path=(*path, str(key)), field=field)

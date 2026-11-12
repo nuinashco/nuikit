@@ -14,6 +14,8 @@ from nuikit.config import Schema
 from nuikit.errors import ConfigError
 from nuikit.runs import mirror_to_wandb, start_run
 
+type Token = SecretStr
+
 
 class Run(Schema):
     """Config with a secret."""
@@ -28,23 +30,36 @@ class Endpoint(Schema):
     password: SecretStr
 
 
+class Replica(Schema):
+    """Config held in a mapping of sequences, with a secret of its own."""
+
+    passphrase: SecretStr
+
+
 class Stack(Schema):
-    """Config with secrets: set, unset, in a nested schema, a mapping and a sequence."""
+    """Config with secrets: set, unset, in nested schemas, mappings and sequences."""
 
     api_key: SecretStr
     spare_key: SecretStr | None = None
+    alias_key: Token
     endpoint: Endpoint
+    replicas: dict[str, list[Replica]]
     headers: dict[str, SecretStr]
     tokens: list[SecretStr]
+    spare_tokens: tuple[SecretStr, ...] = ()
+    groups: dict[str, list[SecretStr]]
     seed: int = 1
 
 
 STACK = Stack.model_validate(
     {
         "api_key": "from-env",
+        "alias_key": "from-env",
         "endpoint": {"password": "from-env"},
+        "replicas": {"eu": [{"passphrase": "from-env"}]},
         "headers": {"authorization": "from-env"},
         "tokens": ["from-env", "from-env"],
+        "groups": {"team": ["from-env"]},
     }
 )
 
@@ -64,8 +79,14 @@ def test_start_run_writes_masked_config_and_provenance(tmp_path):
         pytest.param("api_key=sk-1", "api_key=**********", id="field"),
         pytest.param("++api_key=sk-1", "++api_key=**********", id="forced"),
         pytest.param("~spare_key=sk-1", "~spare_key=**********", id="deleted"),
+        pytest.param("alias_key=sk-1", "alias_key=**********", id="type-alias"),
         pytest.param(
             "endpoint.password=sk-1", "endpoint.password=**********", id="nested-schema"
+        ),
+        pytest.param(
+            "replicas.eu.0.passphrase=sk-1",
+            "replicas.eu.0.passphrase=**********",
+            id="schema-in-containers",
         ),
         pytest.param(
             "headers.authorization=sk-1",
@@ -74,6 +95,17 @@ def test_start_run_writes_masked_config_and_provenance(tmp_path):
         ),
         pytest.param("tokens.1=sk-1", "tokens.1=**********", id="sequence"),
         pytest.param("tokens=[sk-1,sk-2]", "tokens=**********", id="whole-sequence"),
+        pytest.param(
+            "~spare_tokens=[sk-1]", "~spare_tokens=**********", id="deleted-sequence"
+        ),
+        pytest.param(
+            "groups.team=[sk-1,sk-2]",
+            "groups.team=**********",
+            id="sequence-in-mapping",
+        ),
+        pytest.param(
+            "~groups.gone=[sk-1]", "~groups.gone=**********", id="deleted-item"
+        ),
         pytest.param(
             "fallback.password=sk-1", "fallback.password=**********", id="same-name"
         ),

@@ -204,9 +204,10 @@ Secrets come from the environment (`.env`, loaded by `rootutils.setup_root`) thr
 the command line, and reach child processes through the environment. Every secret is typed `SecretStr | None = None`;
 the command that needs it checks it before any work (ERR-4) and raises
 `ConfigError("no service key; set SERVICE_API_KEY in .env")`, naming the variable, and a test that runs that command
-sets the variable itself (`monkeypatch.setenv`). The run directory masks secrets: `config.yaml` shows `**********` for
-every `SecretStr` field, and `run.json` records the command line with the value of every `key=value` that sets one
-masked. W&B records the command line as typed, so a secret given there reaches a mirrored run unmasked.
+sets the variable itself (`monkeypatch.setenv`). The two files `start_run` writes mask secrets: `config.yaml` shows
+`**********` for every `SecretStr` field, and `run.json` records the command line with the value of every `key=value`
+that sets one masked. W&B records the command line as typed, in its files under the run directory
+(`runs/<run_name>/wandb/`) and in the run it uploads, so a secret given there stays unmasked in a mirrored run.
 
 *Why:* a secret without a default fails `make check` wherever the variable is not exported, CI included, and the
 error never names the variable.
