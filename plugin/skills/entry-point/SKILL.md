@@ -49,8 +49,9 @@ when the project's `requires-python` is 3.14 or later (TYP-3).
 3. `templates/command.py.tmpl` -> `src/<pkg>/cli/<command>.py`. Keep its order: `from_hydra` validates before anything
    runs and no `DictConfig` goes further (CFG-1); `configure_logging` once (LOG-1); `seed_everything` once, passing
    the returned `rng` down (RUN-2); build items with `<Family>Factory.from_config(cfg.<group>)` and check that inputs,
-   kinds and credentials work before expensive work (ERR-4); `start_run` (RUN-1); then the work, with outputs written
-   into `run_dir`. `@cli_boundary` sits below `@hydra.main`. To mirror a run to W&B, call
+   kinds and credentials work before expensive work (ERR-4); `start_run` with `repo=paths.ROOT`, the checkout whose
+   commit and dirty flag `run.json` records (RUN-1); then the work, with outputs written into `run_dir`. `@cli_boundary`
+   sits below `@hydra.main`. To mirror a run to W&B, call
    `runs.mirror_to_wandb(cfg, run_dir, project=cfg.wandb_project, entity=cfg.wandb_entity)` after `start_run` when
    `cfg.tracker == "wandb"`; the project then depends on `nuikit[wandb]`.
 4. Register it in `pyproject.toml`: `[project.scripts]` `<cli>-<command> = "<pkg>.cli.<command>:main"`, then

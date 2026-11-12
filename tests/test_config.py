@@ -23,6 +23,12 @@ class Nested(Schema):
     name: str
 
 
+class Named(Schema):
+    """Config with one text field."""
+
+    run_name: str
+
+
 def test_unknown_and_invalid_fields_are_listed_one_per_line():
     with pytest.raises(ConfigError) as error:
         Toy.from_hydra(OmegaConf.create({"steps": 0, "stpes": 2}))
@@ -50,3 +56,19 @@ def test_validated_config_is_read_only():
 
     with pytest.raises(ValidationError):
         config.steps = 4
+
+
+@pytest.mark.parametrize(
+    ("given", "run_name"), [(7, "7"), (1e5, "100000.0")], ids=["int", "float"]
+)
+def test_text_field_takes_a_number_as_yaml_and_the_command_line_give_it(
+    given, run_name
+):
+    config = Named.from_hydra(OmegaConf.create({"run_name": given}))
+
+    assert config.run_name == run_name
+
+
+def test_text_field_still_refuses_a_boolean():
+    with pytest.raises(ConfigError, match="run_name: Input should be a valid string"):
+        Named.from_hydra(OmegaConf.create({"run_name": True}))

@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from pathlib import Path
 
+import numpy as np
 import pytest
 import structlog
 
@@ -29,6 +31,30 @@ def test_events_and_foreign_logs_render_as_json_lines(root_logger, capsys):
     first, second = (json.loads(line) for line in capsys.readouterr().err.splitlines())
     assert (first["event"], first["seed"], first["level"]) == ("run_started", 1, "info")
     assert (second["event"], second["logger"]) == ("plain message", "thirdparty")
+
+
+def test_json_logs_write_numpy_values_and_paths_as_values_and_the_rest_as_repr(
+    root_logger, capsys
+):
+    configure_logging(fmt="json")
+
+    structlog.stdlib.get_logger("app").info(
+        "metrics",
+        loss=np.float32(0.5),
+        step=np.int64(3),
+        bins=np.arange(3),
+        out=Path("runs/r1"),
+        rate=complex(1, 2),
+    )
+
+    event = json.loads(capsys.readouterr().err)
+    assert [event[key] for key in ("loss", "step", "bins", "out", "rate")] == [
+        0.5,
+        3,
+        [0, 1, 2],
+        "runs/r1",
+        "(1+2j)",
+    ]
 
 
 @pytest.mark.parametrize(("tty", "as_json"), [(True, False), (False, True)])

@@ -57,7 +57,8 @@ A family is `base.py` (abstract base, its config schema, its factory) plus an `i
 implementation. `items/__init__.py` calls `nuikit.registry.import_submodules(__name__)`, so adding an item is adding a
 file. The family's `__init__.py` imports `items`, so importing the family registers its kinds. `make configs` and the
 invariant tests import the whole package (`nuikit.registry.import_tree`), so they see every family even before code
-uses it.
+uses it. `import_tree` reads only folders with an `__init__.py`, so every folder between `<pkg>` and a family has one;
+it never imports `<pkg>.cli` or a `__main__` module.
 
 *Check:* review; `tests/test_registry.py` covers `import_submodules` and `import_tree`.
 
@@ -75,7 +76,10 @@ unique; registering a kind twice raises.
 ### FAM-3 MUST
 
 An item binds its config schema through the family's type argument: `class Square(Shape[SquareConfig])` sets
-`Square.Config` and types `self.config` precisely. An explicit `Config = X` still wins.
+`Square.Config` and types `self.config` precisely. An explicit `Config = X` still wins. An item without settings of
+its own names the family's config, `class Unit(Shape[ShapeConfig])`, and an item that extends a registered one keeps
+that item's schema. `register` refuses any other item, since its settings would be rejected as unknown keys:
+`class Tri(Shape)` raises `TypeError: ShapeFactory: Tri must name its config: class Tri(Shape[TriConfig])`.
 `<Family>Factory.from_config(data)` reads `kind`, validates the rest against that item's `Config` and builds the item
 (config-first creation); `validate(data)` only validates.
 
@@ -88,10 +92,19 @@ Each factory declares `config_group`. `make configs` writes `configs/<group>/<ki
 sets `multiple = True`: the entry config selects a list (`<group>: [a, b]`, overridden as `'<group>=[a]'`, quoted
 because zsh expands square brackets), each generated file starts with `# @package <group>.<kind>` because Hydra reads
 a package only from the first line, and the schema field maps each kind to its config. A preset of such a family
-starts with the same `# @package <group>.<kind>` line as the mirror it composes.
+starts with the same `# @package <group>.<kind>` line as the mirror it composes. The field validates each value on its
+own and has no validator for the whole mapping, so that an error names its kind (`metric.f1.threshold`) and the
+errors of every kind are listed:
+
+```python
+metric: dict[
+    str,
+    Annotated[SerializeAsAny[MetricConfig], BeforeValidator(MetricFactory.validate)],
+]
+```
 
 *Check:* the project's `tests/test_invariants.py` (TST-5) fails on stale or missing files; `tests/test_registry.py`
-covers the paths and packages.
+covers the paths and packages, and `tests/test_plugin.py` the error paths of that field.
 
 ### FAM-5 SHOULD
 
@@ -114,7 +127,10 @@ renames can't break YAML.
 ### CFG-2 MUST
 
 Schemas extend `nuikit.config.Schema` (`extra="forbid"`, `frozen=True`). A typo is an error with one line per bad
-field, and validated configs are read-only. Pydantic's default coercion stays on.
+field, and validated configs are read-only. Read-only is shallow: a list or dict held in a field can still be changed
+in place, so a field that must not change is typed as a tuple or a frozenset. Pydantic's default coercion stays on,
+and a `str` field also takes a number, which is what YAML and the command line make of `run_name=7`; it still refuses
+a boolean.
 
 *Why:* "it should be possible to detect unused or redundant settings"
 ([Sculley et al. 2015](https://papers.nips.cc/paper_files/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html)).
@@ -207,15 +223,22 @@ Secrets come from the environment (`.env`, loaded by `rootutils.setup_root`) thr
 the command line, and reach child processes through the environment. Every secret is typed `SecretStr | None = None`;
 the command that needs it checks it before any work (ERR-4) and raises
 `ConfigError("no service key; set SERVICE_API_KEY in .env")`, naming the variable, and a test that runs that command
-sets the variable itself (`monkeypatch.setenv`). The two files `start_run` writes mask secrets: `config.yaml` shows
-`**********` for every `SecretStr` field, and `run.json` records the command line with the value of every `key=value`
-that sets one masked. W&B records the command line as typed, in its files under the run directory
-(`runs/<run_name>/wandb/`) and in the run it uploads, so a secret given there stays unmasked in a mirrored run.
+sets the variable itself (`monkeypatch.setenv`).
+
+Masking follows the type and nothing else. Only fields typed `SecretStr`, `SecretBytes` or `Secret[...]` are masked:
+`config.yaml` and the config sent to W&B show `**********` for them, and `run.json` records the command line with the
+value of every `key=value` that sets one masked, however Hydra lets the key be spelled (`tokens.0`, `tokens[0]`). A
+token in a plain `str`, a URL that carries a password or a header in a plain dict is written as it is, so a
+credential is typed as a secret: `SecretStr` for the whole URL, `dict[str, SecretStr]` for headers. W&B records the
+command line as typed, in its files under the run directory (`runs/<run_name>/wandb/`) and in the run it uploads, so
+a secret given there stays unmasked in a mirrored run.
 
 *Why:* a secret without a default fails `make check` wherever the variable is not exported, CI included, and the
-error never names the variable.
+error never names the variable. A mask by key name or inside URLs would blank ordinary settings and still miss
+credentials, so it would promise more than it keeps.
 
-*Check:* `tests/test_runs.py` checks that the run snapshot and the recorded command line mask secrets; gitleaks.
+*Check:* `tests/test_runs.py` checks that the run snapshot, the config sent to W&B and the recorded command line mask
+the fields typed as secrets, and only those; gitleaks.
 
 ### CFG-7 MUST
 
@@ -247,7 +270,10 @@ errors subclasses it (`ProxyError(UserError)`). Each carries an `exit_code`: `Co
 ### ERR-2 MUST
 
 Each entry point has one boundary, `@cli_boundary`. It turns package errors, pydantic `ValidationError` and OmegaConf
-errors into `error: <message>` on stderr and the matching exit code. Nothing else catches broadly.
+errors into `error: <message>` on stderr and the matching exit code. Nothing else catches broadly. The decorator sits
+directly on the function, below `@hydra.main`: Hydra catches what the function it wraps raises and exits with 1, so a
+boundary above it reports nothing. Errors Hydra finds itself while composing, such as an unknown key or group option
+on the command line, never reach the boundary: Hydra prints them and exits with 1.
 
 *Check:* review; `tests/test_errors.py` covers what the boundary reports.
 
@@ -278,13 +304,24 @@ logging.
 
 Every run writes `runs/<run_name>/` containing:
 
-- `config.yaml`: resolved, with secrets masked;
-- `run.json`: git SHA, dirty flag, start time and argv, the command line with the values of secret settings masked
-  (CFG-6);
+- `config.yaml`: the resolved config with the fields typed as secrets masked (CFG-6). A literal `${` in a string is
+  written escaped (`\${`), so that loading the file gives the text that ran and not a new interpolation, and a set is
+  written as a sorted list, so that two runs of one config write the same file;
+- `run.json`: the commit and the dirty flag of the project's checkout, the start time and argv, the command line with
+  the value of every `key=value` that sets a secret masked (CFG-6);
 - the run's outputs.
 
-`nuikit.runs.start_run` writes the first two, and refuses an existing directory and a `run_name` that leaves `runs/`.
-Hydra writes nothing else. A run mirrored to W&B also gives W&B the command line, as typed (CFG-6).
+`nuikit.runs.start_run` writes the first two. The entry point passes `repo=paths.ROOT`, the checkout whose state
+`run.json` records (the working directory when left out). `start_run` reads the commit and the dirty flag there,
+never in the run directory, and before it creates that directory: `runs/` on another disk or inside another
+repository changes neither, and a run cannot make its own record dirty. Untracked files count as dirty, since a new
+module that is not added yet is code that ran. Both are `null` without git or outside a checkout; when git fails for
+another reason they are `null` too, and one `git_state_unreadable` warning carries the first line of git's error.
+
+`start_run` refuses a `run_name` that leaves `runs/` and a directory that exists, so each job of a sweep needs its
+own name: `-m seed=1,2 'run_name=sweep_${hydra:job.num}'`. For a single run Hydra writes nothing else; a sweep (`-m`)
+still writes its `multirun.yaml` where `hydra.sweep.dir` points, with the overrides as they were typed. A run
+mirrored to W&B also gives W&B the command line, as typed (CFG-6).
 
 *Why:* any result can be traced back to its code and config.
 

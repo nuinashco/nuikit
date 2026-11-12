@@ -14,7 +14,8 @@ from nuikit.errors import ConfigError, describe, first_line
 class Schema(BaseModel):
     """Base for config models: unknown keys are errors, values are read-only."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    # YAML and the command line give `run_name=7` as a number.
+    model_config = ConfigDict(extra="forbid", frozen=True, coerce_numbers_to_str=True)
 
     @classmethod
     def from_hydra(cls, cfg: DictConfig) -> Self:

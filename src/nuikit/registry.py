@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import pkgutil
 from collections.abc import Callable, Mapping
+from types import ModuleType
 from typing import Any, ClassVar, TypeVar, cast, get_args, get_origin
 
 from attrs import define
@@ -85,6 +86,12 @@ class BaseFactory[T]:
                 raise TypeError(f"{name} needs @define or @frozen below @register")
             if not issubclass(item, cls._base_type):
                 raise TypeError(f"{name} must subclass {cls._base_type.__name__}")
+            if issubclass(item, Configurable) and not _names_config(item):
+                example = f"{item.__name__}({cls._base_type.__name__}"
+                raise TypeError(
+                    f"{name} must name its config: "
+                    f"class {example}[{item.__name__}Config])"
+                )
             if kind in cls._registry:
                 raise ValueError(f"{name}: kind '{kind}' is already registered")
             cast(Any, item).kind = kind
@@ -162,13 +169,12 @@ def import_submodules(package: str) -> None:
 
 
 def import_tree(package: str) -> None:
-    """Import `package` and every module below it except CLIs and `__main__` modules."""
-    root = importlib.import_module(package)
-    cli = f"{package}.cli"
-    for info in pkgutil.walk_packages(getattr(root, "__path__", []), f"{package}."):
-        is_cli = info.name == cli or info.name.startswith(f"{cli}.")
-        if not is_cli and not info.name.endswith(".__main__"):
-            importlib.import_module(info.name)
+    """Import `package` and every module below it except CLIs and `__main__` modules.
+
+    Only folders with an `__init__.py` are read. `<package>.cli` is left alone, its
+    `__init__` included.
+    """
+    _import_below(importlib.import_module(package), cli=f"{package}.cli")
 
 
 def families(package: str) -> list[type[ConfigurableFactory[Any]]]:
@@ -213,3 +219,21 @@ def kind_path(factory: type[ConfigurableFactory[Any]], kind: str) -> str:
 def kind_package(factory: type[ConfigurableFactory[Any]], kind: str) -> str:
     """Return the config key a selected `kind` lands at: `<group>.<kind>`, dotted."""
     return f"{factory.config_group}/{kind}".replace("/", ".")
+
+
+def _names_config(item: type[Configurable[Any]]) -> bool:
+    """Tell whether `item`, or a class it extends below Configurable, set `Config`."""
+    below = item.__mro__[: item.__mro__.index(Configurable)]
+    return any("Config" in vars(base) for base in below)
+
+
+def _import_below(parent: ModuleType, *, cli: str) -> None:
+    # `pkgutil.walk_packages` imports a package before its caller can skip it.
+    for info in pkgutil.iter_modules(
+        getattr(parent, "__path__", []), f"{parent.__name__}."
+    ):
+        if info.name == cli or info.name.endswith(".__main__"):
+            continue
+        module = importlib.import_module(info.name)
+        if info.ispkg:
+            _import_below(module, cli=cli)

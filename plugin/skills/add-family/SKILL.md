@@ -79,13 +79,21 @@ when the project's `requires-python` is 3.14 or later (TYP-3).
 A family whose kinds all run in one run, such as metrics, sets `multiple = True` on its factory (FAM-4). Each
 generated file then starts with `# @package <group>.<kind>`, and so does a preset that composes it. The entry config
 selects a list (`- <group>: [a, b]`, overridden as `'<group>=[a]'`, quoted because zsh expands square brackets), and
-the schema field maps each kind to its config:
+the schema field maps each kind to its config. Each value has its own validator and the mapping has none, so that an
+error names its kind (`metric.f1.threshold`) and the errors of every kind are listed:
 
 ```python
-    <group>: dict[str, SerializeAsAny[<Family>Config]]
+from typing import Annotated
 
-    @field_validator("<group>", mode="before")
-    @classmethod
-    def _<group>_by_kind(cls, data: Mapping[str, Any]) -> dict[str, KindConfig]:
-        return {kind: <Family>Factory.validate(item) for kind, item in data.items()}
+from pydantic import BeforeValidator, SerializeAsAny
+
+from <pkg>.<family>.base import <Family>Config, <Family>Factory
+
+
+class MainConfig(Schema):
+    ...
+    <group>: dict[
+        str,
+        Annotated[SerializeAsAny[<Family>Config], BeforeValidator(<Family>Factory.validate)],
+    ]
 ```

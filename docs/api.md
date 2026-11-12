@@ -8,7 +8,7 @@ stable under semver, and until 1.0 a breaking change bumps the minor version. Th
 
 | name | what it is |
 |---|---|
-| `Schema` | Base for config models, a pydantic `BaseModel`: unknown keys are errors and values are read-only. `Schema.from_hydra(cfg)` validates a composed Hydra config and raises one `ConfigError` that names every missing value by its full key or, when none is missing, every invalid field. |
+| `Schema` | Base for config models, a pydantic `BaseModel`: unknown keys are errors and values are read-only. Read-only is shallow: a list or dict held in a field can still be changed in place, so a field that must not change is typed as a tuple or a frozenset. A `str` field takes a number as well, since YAML and the command line give `run_name=7` as one, but no boolean. `Schema.from_hydra(cfg)` validates a composed Hydra config and raises one `ConfigError` that names every missing value by its full key or, when none is missing, every invalid field. |
 
 ## nuikit.configgen
 
@@ -33,10 +33,10 @@ Families: one base class, its items registered under a `kind`, and a factory tha
 |---|---|
 | `KindConfig` | A `Schema` with a `kind` field, which names the registered item to build. |
 | `Configurable` | Base of an item built from one validated config, kept as `self.config`. Its type argument is the item's schema. |
-| `BaseFactory` | Registry of one family, keyed by `kind`: `register`, `get_class`, `create` and `list_registered`. |
+| `BaseFactory` | Registry of one family, keyed by `kind`: `register`, `get_class`, `create` and `list_registered`. `register` raises `TypeError` for a `Configurable` item that names no schema, neither through its type argument nor through the item it extends. |
 | `ConfigurableFactory` | A `BaseFactory` of `Configurable` items: `validate` picks the schema by `kind`, and `from_config` builds the item. `config_group` names the Hydra group its kinds are generated under; `multiple` lets several be selected at once. |
 | `import_submodules` | `import_submodules(package)` imports every module directly inside a package, so that its items register. |
-| `import_tree` | `import_tree(package)` imports a package and everything below it, except CLIs and `__main__` modules. |
+| `import_tree` | `import_tree(package)` imports a package and every module below it, except `<package>.cli`, which it does not import at all, and `__main__` modules. It reads only folders with an `__init__.py`. |
 | `families` | `families(package)` returns the factories of a package that declare a `config_group`. |
 | `config_files` | `config_files(package)` returns the `ConfigFile` of each kind of each family: `<group>/<kind>.yaml`. |
 | `kind_path` | `kind_path(factory, kind)` returns the generated YAML path of a kind, relative to the configs directory. |
@@ -96,15 +96,15 @@ ShapeFactory.from_config({"kind": "square", "side_m": 2}).area()  # 4.0
 | `UserError` | A problem the user can fix. Its `exit_code` is 1. |
 | `ConfigError` | Invalid, incomplete or stale configuration, exit code 2. |
 | `DataError` | Missing, stale or malformed input data, exit code 3. |
-| `cli_boundary` | Decorator for an entry point: prints a user error as `error: <message>` on stderr and exits with its code. pydantic and OmegaConf errors count as config errors; any other exception is a bug and keeps its traceback. |
-| `describe` | `describe(error)` words a pydantic `ValidationError`: the model name, then one line per bad field. |
-| `first_line` | `first_line(error)` words an OmegaConf error, without the lines OmegaConf appends. |
+| `cli_boundary` | Decorator for an entry point: prints a user error as `error: <message>` on stderr and exits with its code. pydantic and OmegaConf errors count as config errors; any other exception is a bug and keeps its traceback. It sits directly on the function, below `@hydra.main`: Hydra catches what the function it wraps raises and exits with 1, so a boundary above it reports nothing. Errors Hydra finds itself while composing, such as an unknown key or group option on the command line, are printed by Hydra and exit with 1. |
+| `describe` | `describe(error)` words a pydantic `ValidationError`: the model name, then one line per bad field, its dotted path first. An error of the model as a whole has no path and is its message alone. |
+| `first_line` | `first_line(error)` words an OmegaConf error, without the lines OmegaConf appends. An error without a message is named by its class. |
 
 ## nuikit.logging
 
 | name | what it is |
 |---|---|
-| `configure_logging` | `configure_logging(level=..., fmt=...)` routes structlog and stdlib loggers through one stderr handler: console lines in a terminal, JSON elsewhere. Call it once, from the entry point. |
+| `configure_logging` | `configure_logging(level=..., fmt=...)` routes structlog and stdlib loggers through one stderr handler: console lines in a terminal, JSON elsewhere. A JSON line holds a NumPy scalar as its Python value, an array as a list, a `Path` as its string and any other value JSON lacks as its `repr`. Call it once, from the entry point. |
 | `LogLevel` | `"debug"`, `"info"`, `"warning"` or `"error"`: the type of `level`, for a config field. |
 | `LogFormat` | `"auto"`, `"console"` or `"json"`: the type of `fmt`, for a config field. |
 
@@ -112,11 +112,12 @@ ShapeFactory.from_config({"kind": "square", "side_m": 2}).area()  # 4.0
 
 | name | what it is |
 |---|---|
-| `start_run` | `start_run(config, name=..., runs_dir=...)` creates `runs_dir/name/` with `config.yaml` (secrets masked) and `run.json` (git SHA, dirty flag, start time, and argv with the value of every `key=value` that sets a secret masked), and returns the folder. A folder that exists, or a `name` that leaves `runs_dir`, is a `ConfigError`. |
-| `mirror_to_wandb` | `mirror_to_wandb(config, run_dir, project=...)` starts a W&B run named after the run folder, with its config. W&B records the command line as typed, without masking a secret given there. It needs the `wandb` extra. |
+| `start_run` | `start_run(config, name=..., runs_dir=..., repo=...)` creates `runs_dir/name/` with `config.yaml` and `run.json`, and returns the folder. `config.yaml` is the resolved config: a literal `${` or `???` in a string is escaped (`\${`, `\???`), so that loading the file gives the text that ran, and a set is a list sorted by the JSON text of its items, the same in every run of one config. `run.json` holds the git SHA and the dirty flag of the checkout at `repo` (the working directory when left out), the start time and argv. Both git values are read in that checkout, never in the run folder, and before the folder is created; untracked files count as dirty. They are `null` without git or outside a checkout; when git fails for another reason they are `null` too and one `git_state_unreadable` warning is logged. Only fields typed `SecretStr`, `SecretBytes` or `Secret[...]` are masked, in `config.yaml` and in argv, where the value of every `key=value` that sets one is masked; a token in a plain `str`, a URL that carries a password or a header in a plain dict is written as it is (CFG-6). A folder that exists, or a `name` that leaves `runs_dir`, is a `ConfigError`. |
+| `mirror_to_wandb` | `mirror_to_wandb(config, run_dir, project=...)` starts a W&B run named after the run folder, with its config, masked as in `config.yaml`: only fields typed `SecretStr`, `SecretBytes` or `Secret[...]`, so a credential in a plain `str`, URL or dict reaches W&B as it is. W&B records the command line as typed, without masking a secret given there. It needs the `wandb` extra. |
+| `log` | The module's logger (LOG-1). `start_run` logs the warning `git_state_unreadable` through it, with `repo` and the first line of git's `error`. |
 
 ## nuikit.seeding
 
 | name | what it is |
 |---|---|
-| `seed_everything` | `seed_everything(seed, deterministic=...)` seeds Python, NumPy and torch, when torch is installed, and returns the `np.random.Generator` to draw from. `deterministic` also forces deterministic torch kernels, which are slower. |
+| `seed_everything` | `seed_everything(seed, deterministic=...)` seeds Python, NumPy and torch, when torch is installed, and returns the `np.random.Generator` to draw from. `deterministic` also forces deterministic torch kernels, which are slower. A negative `seed` raises `ValueError` before anything is seeded. Python, torch and the Generator get `seed` itself, so a seed beyond 32 bits, such as a timestamp, works; NumPy's legacy global RNG gets `seed % 2**32`. |

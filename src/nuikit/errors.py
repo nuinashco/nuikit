@@ -51,14 +51,22 @@ def cli_boundary[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
 
 
 def describe(error: ValidationError) -> str:
-    """Return the model name, then one line per invalid field, dotted path first."""
-    lines = [f"  {'.'.join(map(str, e['loc']))}: {e['msg']}" for e in error.errors()]
+    """Return the model name, then one line per invalid field, dotted path first.
+
+    An error of the model as a whole has no path, and its line is the message alone.
+    """
+    located = ((".".join(map(str, e["loc"])), e["msg"]) for e in error.errors())
+    lines = [f"  {path}: {msg}" if path else f"  {msg}" for path, msg in located]
     return f"invalid {error.title}:\n" + "\n".join(lines)
 
 
 def first_line(error: OmegaConfBaseException) -> str:
-    """Return an OmegaConf error without the full_key/object_type lines it appends."""
-    return f"invalid config: {str(error).splitlines()[0]}"
+    """Return an OmegaConf error without the full_key/object_type lines it appends.
+
+    An error without a message is named by its class.
+    """
+    lines = str(error).strip().splitlines()
+    return f"invalid config: {lines[0] if lines else type(error).__name__}"
 
 
 def _exit(message: str, code: int, *, cause: Exception) -> NoReturn:

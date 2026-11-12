@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Literal
+from pathlib import PurePath
+from typing import Any, Literal, cast
 
+import numpy as np
 import structlog
 
 type LogLevel = Literal["debug", "info", "warning", "error"]
@@ -25,7 +27,10 @@ def configure_logging(*, level: LogLevel = "info", fmt: LogFormat = "auto") -> N
     ]
     as_json = fmt == "json" or (fmt == "auto" and not sys.stderr.isatty())
     rendering: list[structlog.typing.Processor] = (
-        [structlog.processors.dict_tracebacks, structlog.processors.JSONRenderer()]
+        [
+            structlog.processors.dict_tracebacks,
+            structlog.processors.JSONRenderer(default=_jsonable),
+        ]
         if as_json
         else [structlog.dev.ConsoleRenderer()]
     )
@@ -48,3 +53,15 @@ def configure_logging(*, level: LogLevel = "info", fmt: LogFormat = "auto") -> N
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level.upper())
+
+
+def _jsonable(value: object) -> object:
+    """Return what the JSON renderer writes for a value that `json` cannot encode."""
+    if isinstance(value, (np.generic, np.ndarray)):
+        # The Python value of a scalar, the nested list of an array.
+        return cast(Any, value).tolist()
+    if isinstance(value, PurePath):
+        return str(value)
+    # The rest is structlog's own fallback, which `default` replaces.
+    own_form = getattr(value, "__structlog__", None)
+    return repr(value) if own_form is None else own_form()

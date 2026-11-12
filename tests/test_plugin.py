@@ -6,16 +6,20 @@ import ast
 import importlib
 import re
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
+from typing import Any
 
 import pytest
 from omegaconf import OmegaConf
 
 from nuikit import registry
+from nuikit.config import Schema
+from nuikit.errors import ConfigError
 
 PLACEHOLDER = re.compile(r"<[^<>\n]+>")
 NAME = re.compile(r"<\w+>")
+PYTHON_BLOCK = re.compile(r"^```python\n(.*?)^```$", flags=re.DOTALL | re.MULTILINE)
 NAMES = {
     "<pkg>": "skillcheck",
     "<family>": "samplers",
@@ -36,6 +40,7 @@ NAMES = {
     "<command>": "sample",
     "<Command>": "Sample",
 }
+SECOND_KIND = NAMES | {"<kind>": "steady", "<Kind>": "Steady"}
 FAMILY = {
     "add-family/templates/base.py.tmpl": "<pkg>/<family>/base.py",
     "add-family/templates/family__init__.py.tmpl": "<pkg>/<family>/__init__.py",
@@ -45,9 +50,9 @@ FAMILY = {
 SKILLS = ["add-config-field", "add-family", "add-family-item", "entry-point"]
 
 
-def render(text: str) -> str:
+def render(text: str, names: Mapping[str, str] = NAMES) -> str:
     """Fill the template's names, then turn each prose placeholder into one word."""
-    for placeholder, name in NAMES.items():
+    for placeholder, name in names.items():
         text = text.replace(placeholder, name)
     return PLACEHOLDER.sub("placeholder", text)
 
@@ -59,12 +64,17 @@ def skills(pytestconfig: pytest.Config) -> Path:
 
 @pytest.fixture(scope="module")
 def family(skills: Path, tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
-    """Render the family templates once, as the importable package `skillcheck`."""
+    """Render the family templates once, as the importable package `skillcheck`.
+
+    The family has two kinds: the item template is filled a second time.
+    """
     root = tmp_path_factory.mktemp("family")
-    for template, target in FAMILY.items():
-        path = root / render(target)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(render((skills / template).read_text(encoding="utf-8")))
+    for names in (NAMES, SECOND_KIND):
+        for template, target in FAMILY.items():
+            path = root / render(target, names)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            text = (skills / template).read_text(encoding="utf-8")
+            path.write_text(render(text, names))
     sys.path.insert(0, str(root))
     yield root
     sys.path.remove(str(root))
@@ -97,16 +107,38 @@ def test_placeholder_table_explains_every_name_of_the_source_templates(skills, s
 
 
 def test_family_templates_build_a_family_that_registers_and_generates_configs(family):
-    [file] = registry.config_files("skillcheck")
+    files = registry.config_files("skillcheck")
     base = importlib.import_module("skillcheck.samplers.base")
 
     sampler = base.SamplerFactory.from_config({"kind": "constant", "value": 2.0})
 
-    assert (file.path, file.kind, sampler.draw()) == (
-        "sampler/constant.yaml",
-        "constant",
+    assert ([(file.path, file.kind) for file in files], sampler.draw()) == (
+        [("sampler/constant.yaml", "constant"), ("sampler/steady.yaml", "steady")],
         2,
     )
+
+
+def test_multiple_family_field_of_the_skill_reports_every_bad_kind_by_its_path(
+    skills, family
+):
+    text = (skills / "add-family" / "SKILL.md").read_text(encoding="utf-8")
+    [field] = [block for block in PYTHON_BLOCK.findall(text) if "Annotated[" in block]
+    names: dict[str, Any] = {"Schema": Schema}
+    exec(
+        compile(render(field), "add-family/SKILL.md", "exec", dont_inherit=True), names
+    )
+    selected = {
+        kind: {"kind": kind, "value": "high"} for kind in ("constant", "steady")
+    }
+
+    with pytest.raises(ConfigError) as error:
+        names["MainConfig"].from_hydra(OmegaConf.create({"sampler": selected}))
+
+    lines = str(error.value).splitlines()
+    assert [line.split(":")[0].strip() for line in lines[1:]] == [
+        "sampler.constant.value",
+        "sampler.steady.value",
+    ]
 
 
 def test_item_test_template_passes_against_the_rendered_family(skills, family):
@@ -144,3 +176,20 @@ def test_entry_point_template_is_python_with_docstring_and_future_import_once_fi
         isinstance(future, ast.ImportFrom) and future.module,
         [n.name for n in tree.body if isinstance(n, ast.FunctionDef)],
     ) == (True, "__future__", functions)
+
+
+def test_command_template_names_the_projects_checkout_for_run_json(skills):
+    path = skills / "entry-point" / "templates" / "command.py.tmpl"
+
+    tree = ast.parse(render(path.read_text(encoding="utf-8")))
+
+    [call] = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == "runs.start_run"
+    ]
+    assert {key.arg: ast.unparse(key.value) for key in call.keywords} == {
+        "name": "cfg.run_name",
+        "runs_dir": "paths.RUNS_DIR",
+        "repo": "paths.ROOT",
+    }

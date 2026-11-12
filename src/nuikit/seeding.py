@@ -15,10 +15,14 @@ def seed_everything(seed: int, *, deterministic: bool = False) -> np.random.Gene
 
     Code should draw from the returned Generator, not from global state.
     `deterministic` also forces deterministic torch kernels, which are slower.
+    A negative `seed` is a ValueError. Python, torch and the Generator get `seed`
+    itself; NumPy's legacy global RNG takes 32 bits and gets `seed % 2**32`.
     """
+    if seed < 0:
+        raise ValueError(f"seed is {seed}; pass 0 or a positive integer")
     random.seed(seed)
     # Third-party code still draws from NumPy's legacy global RNG.
-    np.random.seed(seed)  # noqa: NPY002
+    np.random.seed(seed % 2**32)  # noqa: NPY002
     if importlib.util.find_spec("torch") is not None:
         torch = importlib.import_module("torch")
         torch.manual_seed(seed)  # Seeds every device, CUDA included.
