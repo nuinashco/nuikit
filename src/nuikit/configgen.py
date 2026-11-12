@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections import deque
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from types import UnionType
@@ -13,7 +14,7 @@ from typing import Any, Union, cast, get_args, get_origin
 from attrs import frozen
 from omegaconf import OmegaConf
 from omegaconf.errors import OmegaConfBaseException
-from pydantic import BaseModel, Secret, SecretBytes, SecretStr
+from pydantic import BaseModel, Secret, SecretBytes, SecretStr, TypeAdapter
 from pydantic.fields import FieldInfo
 from pydantic_core import to_jsonable_python
 from yaml import MarkedYAMLError, YAMLError
@@ -30,6 +31,8 @@ REQUIRED = "???"
 _NOT_STRINGS = frozenset({"yes", "no", "true", "false", "on", "off", "null"})
 # YAML refuses these raw or reads them as line breaks, between quotes too.
 _NOT_RAW = re.compile(r"[\x7f-\x9f\u2028\u2029\ufffe\uffff]")
+# Dumps a model or dataclass in Python mode, which keeps its sets and secrets.
+_ANY: TypeAdapter[Any] = TypeAdapter(Any)
 
 
 @frozen
@@ -66,7 +69,7 @@ def render(file: ConfigFile) -> str:
     # Hydra loads the file this way: text that fails here would stop every run.
     try:
         OmegaConf.create(text)
-    except (YAMLError, OmegaConfBaseException) as e:
+    except (YAMLError, OmegaConfBaseException, UnicodeEncodeError) as e:
         raise ConfigError(
             f"config generated from {name} does not load: {_reason(e)}; "
             "fix the default that causes it"
@@ -216,17 +219,30 @@ def _plain(value: Any, where: str) -> Any:
             "its mask; default it to None and read the secret from the environment "
             "(CFG-6)"
         )
-    if isinstance(value, BaseModel):
-        return _plain(value.model_dump(by_alias=True), where)
+    # Pydantic knows a dataclass by this attribute and writes it as it does a model.
+    if isinstance(value, BaseModel) or hasattr(value.__class__, "__dataclass_fields__"):
+        dumped = _ANY.dump_python(value, by_alias=True)
+        plain = _plain(dumped, where)
+        # Its own JSON serializers write it, unless a set in it needs an order.
+        return plain if _holds_set(dumped) else to_jsonable_python(value)
     if isinstance(value, Mapping):
         items = cast("Mapping[Any, Any]", value).items()
         return {key: _plain(item, where) for key, item in items}
     if isinstance(value, (set, frozenset)):
         members = (_plain(item, where) for item in cast("Iterable[Any]", value))
         return sorted(members, key=lambda item: _flow(to_jsonable_python(item)))
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple, deque)):
         return [_plain(item, where) for item in cast("Iterable[Any]", value)]
     return value
+
+
+def _holds_set(value: Any) -> bool:
+    """Return whether a default dumped in Python mode holds a set at any depth."""
+    if isinstance(value, Mapping):
+        return any(map(_holds_set, cast("Mapping[Any, Any]", value).values()))
+    if isinstance(value, (list, tuple, deque)):
+        return any(map(_holds_set, cast("Iterable[Any]", value)))
+    return isinstance(value, (set, frozenset))
 
 
 def _flow(value: Any) -> str:

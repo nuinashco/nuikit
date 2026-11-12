@@ -3,15 +3,30 @@
 from __future__ import annotations
 
 import math
+from collections import deque
+from dataclasses import dataclass  # conventions: TYP-4 - a dataclass default is tested.
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from omegaconf import DictConfig, OmegaConf
-from pydantic import AliasChoices, Field, Secret, SecretBytes, SecretStr, create_model
+from pydantic import (
+    AliasChoices,
+    Field,
+    Secret,
+    SecretBytes,
+    SecretStr,
+    create_model,
+    field_serializer,
+)
 
 from nuikit.config import Schema
 from nuikit.configgen import ConfigFile, render, stale, write
 from nuikit.errors import ConfigError
+
+# Hash order puts eight members in sorted order once in 40320 processes.
+EIGHT = frozenset({"train", "val", "test", "dev", "probe", "holdout", "unseen", "tune"})
+SORTED = '["dev", "holdout", "probe", "test", "train", "tune", "unseen", "val"]'
 
 
 class Inner(Schema):
@@ -71,24 +86,51 @@ class Keyed(Schema):
 class Tagged(Schema):
     """Nested block whose default is a set."""
 
-    tags: set[str] = Field(default_factory=lambda: {"c", "a", "b"})
+    tags: set[str] = Field(default_factory=lambda: set(EIGHT))
+
+
+@dataclass(frozen=True)  # conventions: TYP-4 - a dataclass default is tested.
+class Split:
+    """Dataclass whose default is a set."""
+
+    names: frozenset[str] = EIGHT
+
+
+class Queued(Schema):
+    """List item whose only set is in a deque."""
+
+    queue: deque[frozenset[str]] = Field(default_factory=lambda: deque([EIGHT]))
 
 
 class Splits(Schema):
     """Config whose defaults hold sets at every depth."""
 
-    names: frozenset[str] = frozenset(
-        {"train", "val", "test", "dev", "probe", "holdout", "unseen", "tune"}
-    )
+    names: frozenset[str] = EIGHT
     mixed: frozenset[int | str] = frozenset({10, 9, "a"})
-    by_stage: dict[str, set[str]] = Field(
-        default_factory=lambda: {"fit": {"c", "a", "b"}}
-    )
-    rounds: list[frozenset[str]] = Field(
-        default_factory=lambda: [frozenset({"c", "a", "b"})]
-    )
+    by_stage: dict[str, set[str]] = Field(default_factory=lambda: {"fit": set(EIGHT)})
+    rounds: list[frozenset[str]] = Field(default_factory=lambda: [EIGHT])
+    queue: deque[frozenset[str]] = Field(default_factory=lambda: deque([EIGHT]))
+    split: Split = Field(default_factory=Split)
     block: Tagged = Field(default_factory=Tagged)
     items: list[Tagged] = Field(default_factory=lambda: [Tagged()])
+    queues: list[Queued] = Field(default_factory=lambda: [Queued()])
+
+
+class Span(Schema):
+    """List item whose field a serializer of its own writes as JSON."""
+
+    length: timedelta = timedelta(minutes=5)
+
+    @field_serializer("length", when_used="json")
+    def _seconds(self, length: timedelta) -> float:
+        return length.total_seconds()
+
+
+class Spans(Schema):
+    """Config whose list and dict defaults hold models."""
+
+    spans: list[Span] = Field(default_factory=lambda: [Span()])
+    by_stage: dict[str, Span] = Field(default_factory=lambda: {"fit": Span()})
 
 
 class Described(Schema):
@@ -185,16 +227,29 @@ def test_render_writes_a_set_as_a_sorted_list_at_any_depth():
     text = render(ConfigFile("splits.yaml", Splits))
 
     assert text.splitlines()[2:] == [
-        'names: ["dev", "holdout", "probe", "test", "train", "tune", "unseen", "val"]',
+        f"names: {SORTED}",
         'mixed: ["a", 10, 9]',
-        'by_stage: {"fit": ["a", "b", "c"]}',
-        'rounds: [["a", "b", "c"]]',
+        f'by_stage: {{"fit": {SORTED}}}',
+        f"rounds: [{SORTED}]",
+        f"queue: [{SORTED}]",
+        f'split: {{"names": {SORTED}}}',
         "block:",
-        '  tags: ["a", "b", "c"]',
+        f"  tags: {SORTED}",
         "",
-        'items: [{"tags": ["a", "b", "c"]}]',
+        f'items: [{{"tags": {SORTED}}}]',
+        f'queues: [{{"queue": [{SORTED}]}}]',
     ]
     assert Splits.from_hydra(load(text)) == Splits()
+
+
+def test_render_writes_a_model_in_a_default_with_its_json_serializers():
+    text = render(ConfigFile("spans.yaml", Spans))
+
+    assert text.splitlines()[2:] == [
+        'spans: [{"length": 300.0}]',
+        'by_stage: {"fit": {"length": 300.0}}',
+    ]
+    assert Spans.from_hydra(load(text)) == Spans()
 
 
 def test_render_writes_a_description_on_one_comment_line():
@@ -229,6 +284,12 @@ def test_render_writes_an_interpolation_as_it_stands():
             {"a": (int, Field(1, alias="x")), "b": (int, Field(2, alias="x"))},
             "found duplicate key x",
             id="two-fields-under-one-key",
+        ),
+        pytest.param(
+            {"prompt": (str, "a \ud800 b")},
+            "'utf-8' codec can't encode character '\\ud800' in position 87: "
+            "surrogates not allowed",
+            id="lone-surrogate",
         ),
     ],
 )
@@ -281,7 +342,9 @@ def test_render_escapes_a_character_that_yaml_does_not_take_raw(char):
     assert prompt.from_hydra(load(text)) == prompt()
 
 
-@pytest.mark.parametrize("word", ["on", "off", "yes", "no", "true", "null", "1"])
+@pytest.mark.parametrize(
+    "word", ["on", "off", "yes", "no", "true", "null", "1", "Yes", "ON", "Null"]
+)
 def test_render_quotes_a_key_that_yaml_would_not_read_as_that_string(word):
     fields: dict[str, Any] = {word: (int, 1)}
     keyword = create_model("Keyword", __base__=Schema, **fields)
@@ -299,13 +362,15 @@ def test_render_writes_a_field_under_the_key_validation_reads_it_from():
     assert Aliased.from_hydra(load(text)) == Aliased()
 
 
-def test_render_falls_back_to_the_alias_when_the_validation_alias_is_no_string():
+def test_render_writes_the_alias_beside_alias_choices_which_validation_rejects():
     either = Field(default=2, validation_alias=AliasChoices("a", "b"), alias="one")
     choices = create_model("Choices", __base__=Schema, either=(int, either))
 
     text = render(ConfigFile("choices.yaml", choices))
 
     assert text.splitlines()[2:] == ["one: 2"]
+    with pytest.raises(ConfigError, match="one: Extra inputs are not permitted"):
+        choices.from_hydra(load(text))
 
 
 @pytest.mark.parametrize(
@@ -315,6 +380,7 @@ def test_render_falls_back_to_the_alias_when_the_validation_alias_is_no_string()
         pytest.param(SecretBytes, SecretBytes(b"EMPTY"), "api_key", id="bytes"),
         pytest.param(Secret[int], Secret[int](7), "api_key", id="generic"),
         pytest.param(list[SecretStr], [SecretStr("EMPTY")], "api_key", id="in-a-list"),
+        pytest.param(list[Keyed], [Keyed()], "api_key", id="in-a-model-in-a-list"),
         pytest.param(Keyed, Keyed(), "api_key.token", id="in-a-nested-block"),
     ],
 )
