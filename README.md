@@ -52,7 +52,9 @@ def main() -> None:
 main()
 ```
 
-Here the config comes from the command line; in a project it is the one Hydra composed.
+Here the config comes from the command line; in a project it is the one Hydra composed. There `@cli_boundary` sits
+directly on the function, below `@hydra.main`: Hydra catches what the function it wraps raises and exits with 1, so a
+boundary above it reports nothing.
 
 ```console
 $ uv run python train.py steps=500
@@ -74,7 +76,7 @@ $ echo $?
 | `nuikit.registry` | Families: items that register under a `kind` and are built from the config that names it. |
 | `nuikit.errors` | `UserError` with an exit code, and `@cli_boundary`, which prints `error: <message>` instead of a traceback. |
 | `nuikit.logging` | `configure_logging`: readable lines in a terminal, JSON everywhere else. |
-| `nuikit.runs` | `start_run`: a folder per run, with its config and the git commit it ran from. |
+| `nuikit.runs` | `start_run`: a folder per run, with its config (fields typed as secrets masked) and the commit of the checkout it ran from. |
 | `nuikit.seeding` | `seed_everything`: seeds Python, NumPy and torch, and returns the generator to pass around. |
 
 [docs/api.md](docs/api.md) lists every public name and shows a family in one file.

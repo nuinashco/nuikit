@@ -10,10 +10,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 import structlog
+from attrs import frozen
 
 from nuikit.logging import configure_logging
 
 
+@frozen
 class Shaped:
     """Value that gives structlog its own form."""
 

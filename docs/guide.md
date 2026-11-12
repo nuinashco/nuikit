@@ -228,8 +228,8 @@ sets the variable itself (`monkeypatch.setenv`).
 Masking follows the type and nothing else. Only fields typed `SecretStr`, `SecretBytes` or `Secret[...]` are masked:
 `config.yaml` and the config sent to W&B show `**********` for them, and `run.json` records the command line with the
 value of every `key=value` that sets one masked, however Hydra lets the key be spelled (`tokens.0`, `tokens[0]`) and
-whether it gives the field's name or an alias, except `~key=value` that deletes a mapping or list item holding a
-schema with a secret. A token in a plain `str`, a URL that carries a password or a header in a plain dict is written
+whether it gives the field's name or an alias, except `~key=value` that deletes a value containing a schema with a
+secret. A token in a plain `str`, a URL that carries a password or a header in a plain dict is written
 as it is, so a credential is typed as a secret: `SecretStr` for the whole URL, `dict[str, SecretStr]` for headers.
 W&B records the command line as typed, in its files under the run directory (`runs/<run_name>/wandb/`) and in the
 run it uploads, so a secret given there stays unmasked in a mirrored run.

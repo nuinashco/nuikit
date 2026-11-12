@@ -58,7 +58,7 @@ def start_run(
     Only fields typed `SecretStr`, `SecretBytes` or `Secret[...]` are masked, there
     and in the command line that run.json records, where the value of each
     `key=value` that gives one is masked, by its name or an alias, except
-    `~key=value` that deletes an item holding a schema with a secret. A token in a
+    `~key=value` that deletes a value containing a schema with a secret. A token in a
     plain `str`, a URL that carries a password or a header in a plain dict is
     written as it is.
 
@@ -273,19 +273,33 @@ def _secrets(
     """
     if isinstance(value, _SECRET_TYPES):
         yield ".".join(path), field
+    elif isinstance(value, RootModel):
+        # Hydra's keys skip `root`: the model is written as what it holds.
+        root = cast(RootModel[object], value).root
+        yield from _secrets(root, path=path, field=field)
     elif isinstance(value, BaseModel):
-        for name, info in type(value).model_fields.items():
-            held = getattr(value, name)
-            for key in _keys(name, info):
-                if _typed_secret(info.annotation):
-                    yield ".".join((*path, *key)), key[0]
-                yield from _secrets(held, path=(*path, *key), field=key[0])
+        yield from _field_secrets(value, path=path)
     elif isinstance(value, Mapping):
         for key, item in cast(Mapping[object, object], value).items():
             yield from _secrets(item, path=(*path, str(key)), field=field)
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         for index, item in enumerate(cast(Sequence[object], value)):
             yield from _secrets(item, path=(*path, str(index)), field=field)
+
+
+def _field_secrets(
+    model: BaseModel, *, path: tuple[str, ...]
+) -> Iterator[tuple[str, str]]:
+    """Yield what `_secrets` does for each field of `model`, under each of its keys."""
+    for name, info in type(model).model_fields.items():
+        # Walked once for all keys: a walk per key would double at every level.
+        below = list(_secrets(getattr(model, name)))
+        for key in _keys(name, info):
+            prefix = (*path, *key)
+            if _typed_secret(info.annotation):
+                yield ".".join(prefix), key[0]
+            for inner, field in below:
+                yield ".".join((*prefix, inner) if inner else prefix), field or key[0]
 
 
 def _keys(name: str, info: FieldInfo) -> list[tuple[str, ...]]:

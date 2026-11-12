@@ -12,6 +12,8 @@ import pytest
 from omegaconf import DictConfig, OmegaConf
 from pydantic import (
     AliasChoices,
+    AliasPath,
+    ConfigDict,
     Field,
     Secret,
     SecretBytes,
@@ -99,7 +101,9 @@ class Split:
 class Queued(Schema):
     """List item whose only set is in a deque."""
 
-    queue: deque[frozenset[str]] = Field(default_factory=lambda: deque([EIGHT]))
+    queue: deque[frozenset[str]] = Field(
+        default_factory=lambda: deque([EIGHT]), alias="waiting"
+    )
 
 
 class Splits(Schema):
@@ -237,7 +241,7 @@ def test_render_writes_a_set_as_a_sorted_list_at_any_depth():
         f"  tags: {SORTED}",
         "",
         f'items: [{{"tags": {SORTED}}}]',
-        f'queues: [{{"queue": [{SORTED}]}}]',
+        f'queues: [{{"waiting": [{SORTED}]}}]',
     ]
     assert Splits.from_hydra(load(text)) == Splits()
 
@@ -305,6 +309,15 @@ def test_render_refuses_text_that_hydra_would_not_load(fields, reason):
     )
 
 
+def test_render_refuses_a_default_that_pydantic_cannot_write():
+    typed = create_model("Typed", __base__=Schema, factory=(type[int], int))
+
+    with pytest.raises(
+        ConfigError, match=r"default of Typed\.factory cannot be written"
+    ):
+        render(ConfigFile("typed.yaml", typed))
+
+
 def test_render_writes_non_finite_floats_as_yaml_reads_them():
     text = render(ConfigFile("limits.yaml", Limits))
 
@@ -362,15 +375,45 @@ def test_render_writes_a_field_under_the_key_validation_reads_it_from():
     assert Aliased.from_hydra(load(text)) == Aliased()
 
 
-def test_render_writes_the_alias_beside_alias_choices_which_validation_rejects():
-    either = Field(default=2, validation_alias=AliasChoices("a", "b"), alias="one")
-    choices = create_model("Choices", __base__=Schema, either=(int, either))
+@pytest.mark.parametrize(
+    ("field", "config", "key"),
+    [
+        pytest.param(
+            Field(default=2, validation_alias=AliasChoices("a", "b"), alias="one"),
+            ConfigDict(),
+            "a",
+            id="alias-choices",
+        ),
+        pytest.param(
+            Field(default=2, validation_alias=AliasChoices(AliasPath("a", 0), "b")),
+            ConfigDict(),
+            "b",
+            id="alias-choices-past-a-path",
+        ),
+        pytest.param(
+            Field(default=2, validation_alias=AliasPath("a")),
+            ConfigDict(),
+            "a",
+            id="alias-path-of-one-key",
+        ),
+        pytest.param(
+            Field(default=2, alias="one"),
+            ConfigDict(validate_by_name=True, validate_by_alias=False),
+            "either",
+            id="names-only",
+        ),
+    ],
+)
+def test_render_writes_a_field_under_a_key_validation_reads(field, config, key):
+    class Choices(Schema):
+        model_config = config
 
-    text = render(ConfigFile("choices.yaml", choices))
+        either: int = field
 
-    assert text.splitlines()[2:] == ["one: 2"]
-    with pytest.raises(ConfigError, match="one: Extra inputs are not permitted"):
-        choices.from_hydra(load(text))
+    text = render(ConfigFile("choices.yaml", Choices))
+
+    assert text.splitlines()[2:] == [f"{key}: 2"]
+    assert Choices.from_hydra(load(text)) == Choices()
 
 
 @pytest.mark.parametrize(

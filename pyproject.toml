@@ -19,6 +19,7 @@ dependencies = [
     "omegaconf>=2.4",
     "pydantic>=2.14",
     "pydantic-core",  # No bound: pydantic pins the exact release it was built with.
+    "pyyaml>=5.1",  # `omegaconf` loads YAML with it; `configgen` names its errors.
     "structlog>=26.1",
 ]
 

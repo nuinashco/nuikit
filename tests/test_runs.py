@@ -54,6 +54,10 @@ class Replica(Schema):
     passphrase: SecretStr
 
 
+class Headers(RootModel[dict[str, SecretStr]]):
+    """Headers as a model of their own."""
+
+
 class Stack(Schema):
     """Config with secrets of every type: set, unset, nested, in containers, renamed."""
 
@@ -76,6 +80,7 @@ class Stack(Schema):
         None, validation_alias=AliasChoices("authKey", AliasPath("auth", 0))
     )
     vaulted: SecretStr | None = Field(None, validation_alias=AliasPath("vault", "key"))
+    wrapped: Headers = Headers({"bearer": SecretStr("from-env")})
     seed: int = 1
 
 
@@ -336,6 +341,10 @@ def test_sets_are_written_sorted_by_the_json_text_of_their_items_at_any_depth(
         pytest.param("signing_key=sk-1", "signing_key=**********", id="secret-bytes"),
         pytest.param("passcode=4321", "passcode=**********", id="secret-of-a-number"),
         pytest.param("apiKey=sk-1", "apiKey=**********", id="field-alias"),
+        pytest.param("keyed=sk-1", "keyed=**********", id="name-of-aliased-field"),
+        pytest.param(
+            "wrapped.bearer=sk-1", "wrapped.bearer=**********", id="root-model"
+        ),
         pytest.param("authKey=sk-1", "authKey=**********", id="alias-choice"),
         pytest.param("auth=[sk-1]", "auth=**********", id="alias-path-choice"),
         pytest.param("vault.key=sk-1", "vault.key=**********", id="alias-path"),

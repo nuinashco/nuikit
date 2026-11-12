@@ -14,9 +14,17 @@ from typing import Any, Union, cast, get_args, get_origin
 from attrs import frozen
 from omegaconf import OmegaConf
 from omegaconf.errors import OmegaConfBaseException
-from pydantic import BaseModel, Secret, SecretBytes, SecretStr, TypeAdapter
+from pydantic import (
+    AliasChoices,
+    AliasPath,
+    BaseModel,
+    Secret,
+    SecretBytes,
+    SecretStr,
+    TypeAdapter,
+)
 from pydantic.fields import FieldInfo
-from pydantic_core import to_jsonable_python
+from pydantic_core import PydanticSerializationError, to_jsonable_python
 from yaml import MarkedYAMLError, YAMLError
 
 from nuikit.config import Schema
@@ -115,7 +123,7 @@ def _fields(
         if name in skip:
             continue
         where = f"{owner}.{name}"
-        key = _key(name, field)
+        key = _key(name, field, schema)
         # A comment ends at a line break: the rest of the text would be read as YAML.
         description = " ".join((field.description or "").split())
         comment = f"  # {description}" if description else ""
@@ -165,10 +173,22 @@ def _model(annotation: Any) -> type[BaseModel] | None:
     return models[0] if len(models) == 1 else None
 
 
-def _key(name: str, field: FieldInfo) -> str:
-    """Return the key validation reads a field from: its alias when it has one."""
+def _key(name: str, field: FieldInfo, schema: type[BaseModel]) -> str:
+    """Return the key validation reads a field from.
+
+    That is its alias when it has one: of several, the first that is one plain key. A
+    schema that validates by name only reads the name.
+    """
+    if schema.model_config.get("validate_by_alias") is False:
+        return name
+    # Of several keys, the first that is one plain key, as pydantic's JSON schema picks.
     alias = field.validation_alias
-    return alias if isinstance(alias, str) else field.alias or name
+    choices = alias.choices if isinstance(alias, AliasChoices) else [alias]
+    for choice in choices:
+        path = choice.path if isinstance(choice, AliasPath) else [choice]
+        if len(path) == 1 and isinstance(path[0], str):
+            return path[0]
+    return field.alias or name
 
 
 def _spelled(key: str) -> str:
@@ -204,7 +224,14 @@ def _scalar(value: Any, where: str) -> str:
         return REQUIRED
     # A string is written as it stands: `${...}` in it is OmegaConf syntax, which the
     # generated file resolves as an interpolation.
-    return _flow(to_jsonable_python(_plain(value, where)))
+    try:
+        data = to_jsonable_python(_plain(value, where))
+    except PydanticSerializationError as e:
+        raise ConfigError(
+            f"default of {where} cannot be written: {e}; give it a type that pydantic "
+            "writes without a JSON-only serializer"
+        ) from e
+    return _flow(data)
 
 
 def _plain(value: Any, where: str) -> Any:
