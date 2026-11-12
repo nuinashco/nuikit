@@ -203,7 +203,7 @@ wheels = [
 [[package]]
 name = "conventions-hooks"
 version = "0.1.0"
-source = { git = "https://github.com/nuinashco/conventions?branch=main#1ac9aeb4781a248e586cd813ee6486b294f32c9f" }
+source = { git = "https://github.com/nuinashco/conventions?branch=main#f0623aa70c183a8e80438b0111f12917dcbbe556" }
 dependencies = [
     { name = "attrs" },
 ]
