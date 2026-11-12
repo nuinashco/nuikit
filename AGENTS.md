@@ -10,8 +10,8 @@ the Claude Code plugin that teaches them its patterns. How it is built: [CONTRIB
   brings its rules and hooks) and [docs/guide.md](docs/guide.md), which holds the rules that name nuikit's API (FAM,
   CFG, ERR-1, ERR-2, LOG-1, LOG-3, RUN-1, RUN-2). Code here is held to them like any project's.
 - Keep the public API stable: every module-level name without a leading underscore in the seven modules, all listed
-  in README's module table. A rename or changed signature is a breaking change; versions follow semver, and until 1.0
-  a breaking change bumps the minor version. A new public name gets a place in that table.
+  in [docs/api.md](docs/api.md). A rename or changed signature is a breaking change; versions follow semver, and
+  until 1.0 a breaking change bumps the minor version. A new public name gets a row there, which a test checks.
 - A rule change edits `docs/guide.md`, the code and tests its *Check* names, and the skills that show the pattern, in
   one commit. Rule IDs are never renamed or reused.
 - Skills in `plugin/skills/` show code exactly as the guide asks; `make test` renders their family templates and runs
@@ -23,9 +23,8 @@ the Claude Code plugin that teaches them its patterns. How it is built: [CONTRIB
 
 ```bash
 make setup        # uv sync + git hooks (pre-commit, commit-msg)
-make check        # ruff, import layers, pyright (strict on src/), pytest: must pass before every commit
+make check        # ruff, the conventions checks, import layers, pyright (strict on src/), pytest: before every commit
 make format       # ruff fixes + format
-make build        # sdist and wheel into dist/
 ```
 
 ## Layout
@@ -33,5 +32,6 @@ make build        # sdist and wheel into dist/
 - `src/nuikit/`: `config`, `configgen`, `registry`, `errors`, `logging`, `runs`, `seeding`; the layers contract in
   `pyproject.toml` fixes which may import which.
 - `tests/`: one module per library module, plus `test_plugin.py` for the skills; fakes live in `conftest.py`.
-- `docs/guide.md`: the nuikit rules. `plugin/`: `.claude-plugin/plugin.json` and `skills/<name>/SKILL.md`.
-- Releases are tags `vX.Y.Z` matching `version` in `pyproject.toml`; `release.yml` publishes them to PyPI.
+- `docs/guide.md`: the nuikit rules; `docs/api.md`: every public name. `plugin/`: `.claude-plugin/plugin.json` and
+  `skills/<name>/SKILL.md`.
+- Releases are tags `vX.Y.Z` on `main` matching `version` in `pyproject.toml`; projects install nuikit from the tag.

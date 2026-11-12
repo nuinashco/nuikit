@@ -66,8 +66,9 @@ when the project's `requires-python` is 3.14 or later (TYP-3).
    ```
 
    Then add `- <group>: <kind>` to the `defaults:` list of `configs/<command>.yaml`, above `_self_`. The composition
-   root builds the item with `<Family>Factory.from_config(cfg.<group>)`. A typo in the kind then fails validation
-   with exit code 2: `error: unknown sampler kind 'sobl'; registered: sobol, uniform`.
+   root builds the item with `<Family>Factory.from_config(cfg.<group>)`. A `kind` that no item registered then fails
+   validation with exit code 2: `error: unknown sampler kind 'sobl'; registered: sobol, uniform`. Hydra itself
+   refuses a mistyped group option (`sampler=sobl`) before that, and lists the options the group has.
 6. `make configs` writes `configs/<group>/<kind>.yaml`. Never edit generated files; presets that name variants of a
    kind are hand-written files in the same group with names that no kind takes (CFG-3).
 7. Add the family to the "Extending" table in CONTRIBUTING.md: what to add, where, what selects it (FAM-5).

@@ -38,18 +38,20 @@ src/nuikit/           the library, one module per concern; py.typed ships its ty
 tests/                one test module per library module; test_plugin.py renders the skill templates;
                       conftest.py holds the fakes
 docs/guide.md         FAM, CFG, ERR-1, ERR-2, LOG-1, LOG-3, RUN-1, RUN-2: the rules for code that uses nuikit
+docs/api.md           every public name, a row each
 plugin/               the Claude Code plugin `nuikit`
   .claude-plugin/     plugin.json, without a version, so installs follow commits
   skills/<name>/      SKILL.md, plus templates/*.tmpl with <placeholders> to fill
-.github/workflows/    ci.yml: `make check` on Python 3.12 and 3.14; release.yml: tags to PyPI
+.github/workflows/    ci.yml: `make check` on Python 3.12 and 3.14
 .claude/settings.json the conventions and nuikit plugins enabled, Claude's commit trailer off (GIT-2)
 ```
 
 ## Changing nuikit
 
-- The public API is every module-level name without a leading underscore in the seven modules, and README's table
-  lists all of them. Keep it stable: a rename or a changed signature is a breaking change, and until 1.0 a breaking
-  change bumps the minor version (semver). A new public name gets a place in that table.
+- The public API is every module-level name without a leading underscore in the seven modules, and
+  [docs/api.md](docs/api.md) lists all of them. Keep it stable: a rename or a changed signature is a breaking
+  change, and until 1.0 a breaking change bumps the minor version (semver). A new public name gets a row there;
+  `tests/test_docs.py` fails while the page and the code differ.
 - A rule change edits `docs/guide.md`, the code and tests its *Check* names, and the skills that show the pattern,
   in the same commit. Keep the rule ID and never reuse a retired one.
 - A change to what a skill template produces runs `make test`: `tests/test_plugin.py` renders the family templates
@@ -62,7 +64,7 @@ plugin/               the Claude Code plugin `nuikit`
 ```bash
 make setup    # uv sync + pre-commit and commit-msg hooks
 make test     # unit tests, under a second
-make check    # ruff, import layers, pyright, pytest: what CI runs
+make check    # ruff, the conventions checks, import layers, pyright, pytest: what CI runs
 ```
 
 Fakes, not mocks, and they live in `tests/conftest.py`: its `fake_wandb` fixture swaps `wandb` for an in-process
@@ -70,9 +72,10 @@ fake module. Each case covers a distinct behaviour, named as a sentence.
 
 ## Release
 
-Tag a commit on `main` whose `pyproject.toml` has the same version: `git tag v0.2.0 && git push origin v0.2.0`.
-`release.yml` refuses a tag that differs from `version`, then builds and publishes to PyPI. Projects move to it with
-`uv lock --upgrade-package nuikit`, or by changing the tag in their `[tool.uv.sources]`.
+nuikit is installed from its git tags; it is not published to a package index. To release, set `version` in
+`pyproject.toml`, run `uv lock`, and merge that. Once CI passes on `main`, tag the commit with the same version:
+`git tag v0.2.0 && git push origin v0.2.0`. Projects move to it by changing the tag under `[tool.uv.sources]` in
+their `pyproject.toml` and running `uv lock`.
 
 ## Deviations
 

@@ -1,124 +1,110 @@
 # nuikit
 
-The machinery that config-driven Python projects share: strict config schemas validated from Hydra, YAML generated
-from them, families of interchangeable items chosen by `kind`, user errors with exit codes, structured logging, run
-directories with provenance, and seeding. Projects from
-[nuinashco/rnd-template](https://github.com/nuinashco/rnd-template) are built on it.
+The parts that config-driven Python projects share, as one small library: config schemas checked before anything
+runs, YAML files generated from them, interchangeable items chosen by a `kind` key, errors with exit codes, logging,
+run folders and seeding.
 
-The rules for code that uses it are in
-[docs/guide.md](https://github.com/nuinashco/nuikit/blob/main/docs/guide.md); the general conventions are in
-[nuinashco/conventions](https://github.com/nuinashco/conventions). Changing nuikit itself:
-[CONTRIBUTING.md](https://github.com/nuinashco/nuikit/blob/main/CONTRIBUTING.md).
+It is for projects that compose their config with [Hydra](https://hydra.cc/). Starting a new one? Use
+[rnd-template](https://github.com/nuinashco/rnd-template), which sets nuikit up for you.
 
 ## Install
 
-Python 3.12 or later.
+You need [uv](https://docs.astral.sh/uv/) and Python 3.12 or later. Add nuikit, pinned to a release tag, and Hydra:
 
 ```bash
-uv add nuikit "hydra-core>=1.4.0rc1"   # or nuikit[wandb] to mirror runs to Weights & Biases
-uv add "nuikit @ git+https://github.com/nuinashco/nuikit@v0.1.0"   # a tag, straight from GitHub
-pip install nuikit
+uv add git+https://github.com/nuinashco/nuikit --tag v0.1.0
+uv add "hydra-core>=1.4.0rc1"
 ```
 
-nuikit needs `hydra-core>=1.4.0rc1`, a pre-release, because 1.3.x crashes on Python 3.14. pip accepts it through
-nuikit's own requirement. uv takes a pre-release only when your project names it, or when nuikit comes from a git or
-path source, so list `hydra-core>=1.4.0rc1` in your own dependencies, as projects from the rnd template do. torch is
-optional: `seed_everything` seeds it when it is installed.
+Hydra is named with its pre-release because nuikit needs OmegaConf 2.4, which Hydra 1.3 does not accept. To mirror
+runs to Weights & Biases, add `--extra wandb` to the first command. torch is optional: `seed_everything` seeds it
+when it is installed.
 
-## Modules
+To move to a newer release, change the tag under `[tool.uv.sources]` in your `pyproject.toml` and run `uv lock`.
 
-| module | gives |
-|---|---|
-| `nuikit.config` | `Schema`, a pydantic base that rejects unknown keys and freezes values; `Schema.from_hydra(cfg)` validates a composed Hydra config and raises one `ConfigError` naming every bad field |
-| `nuikit.configgen` | `ConfigFile`, `render`, `stale`, `write`: the YAML mirror of a schema, every field with its default and description; `HEADER`, `PACKAGE`, `GROUPS`, `REQUIRED`: the comment lines and `???` marker it writes |
-| `nuikit.registry` | `KindConfig`, `Configurable`, `ConfigurableFactory` (over `BaseFactory`, a registry keyed by `kind`): families whose items register by `kind` and build from config; `import_submodules`, `import_tree`, `families`, `config_files`, `kind_path`, `kind_package` for discovery and generated configs |
-| `nuikit.errors` | `UserError`, `ConfigError` (exit 2), `DataError` (exit 3), and `@cli_boundary`, which prints `error: <message>` and exits with the code; `describe` and `first_line` word pydantic and OmegaConf errors the way it prints them |
-| `nuikit.logging` | `configure_logging(level=..., fmt=...)`: structlog over stdlib, console on a terminal, JSON elsewhere; `LogLevel` and `LogFormat`, the literal types of `level` and `fmt`, for config fields |
-| `nuikit.runs` | `start_run`: `runs/<name>/` with `config.yaml` (secrets masked) and `run.json` (git SHA, dirty flag, argv, start time); `mirror_to_wandb`, with the `wandb` extra |
-| `nuikit.seeding` | `seed_everything(seed, deterministic=...)`: seeds Python, NumPy and torch, and returns the `np.random.Generator` to pass around |
+## Use
 
-A family in one file (a project splits it into `base.py` and `items/`, FAM-1):
+Declare the settings as a schema and wrap the entry point, so that a mistake in the config prints one clear message:
 
 ```python
-from abc import ABC, abstractmethod
-from typing import Any
+# train.py
+from omegaconf import OmegaConf
+from pydantic import Field
 
-from attrs import define
-
-from nuikit.registry import Configurable, ConfigurableFactory, KindConfig
-
-
-class ShapeConfig(KindConfig):
-    """Settings every shape kind shares."""
+from nuikit.config import Schema
+from nuikit.errors import cli_boundary
 
 
-@define
-class Shape[C: ShapeConfig](Configurable[C], ABC):
-    """Plane figure."""
+class TrainConfig(Schema):
+    """Settings of one training run."""
 
-    @abstractmethod
-    def area(self) -> float: ...
-
-
-class ShapeFactory(ConfigurableFactory[Shape[Any]]):
-    """Registry of shape kinds; `shape=<kind>` selects one."""
-
-    config_group = "shape"
+    steps: int = Field(default=100, gt=0)
+    lr: float = 3e-4
 
 
-class SquareShapeConfig(ShapeConfig):
-    """Settings of the square shape."""
-
-    side_m: float = 1.0
-
-
-@ShapeFactory.register("square")  # Outermost: attrs replaces the class below it.
-@define
-class SquareShape(Shape[SquareShapeConfig]):
-    """Axis-aligned square."""
-
-    def area(self) -> float:
-        return self.config.side_m**2
+@cli_boundary
+def main() -> None:
+    cfg = TrainConfig.from_hydra(OmegaConf.from_cli())
+    print(cfg)
 
 
-ShapeFactory.from_config({"kind": "square", "side_m": 2}).area()  # 4.0
+main()
 ```
+
+Here the config comes from the command line; in a project it is the one Hydra composed.
+
+```console
+$ uv run python train.py steps=500
+steps=500 lr=0.0003
+$ uv run python train.py steps=0 lrr=1
+error: invalid TrainConfig:
+  steps: Input should be greater than 0
+  lrr: Extra inputs are not permitted
+$ echo $?
+2
+```
+
+## What is in it
+
+| module | what it gives you |
+|---|---|
+| `nuikit.config` | `Schema`: a pydantic model that rejects unknown keys, is read-only and validates a Hydra config in one call. |
+| `nuikit.configgen` | The YAML file of a schema, with every default and description, and a check that it is up to date. |
+| `nuikit.registry` | Families: items that register under a `kind` and are built from the config that names it. |
+| `nuikit.errors` | `UserError` with an exit code, and `@cli_boundary`, which prints `error: <message>` instead of a traceback. |
+| `nuikit.logging` | `configure_logging`: readable lines in a terminal, JSON everywhere else. |
+| `nuikit.runs` | `start_run`: a folder per run, with its config and the git commit it ran from. |
+| `nuikit.seeding` | `seed_everything`: seeds Python, NumPy and torch, and returns the generator to pass around. |
+
+[docs/api.md](docs/api.md) lists every public name and shows a family in one file.
+[docs/guide.md](docs/guide.md) holds the rules for code that uses them.
 
 ## Claude Code plugin
 
-`plugin/` is the `nuikit` plugin: skills that write code the way
-[docs/guide.md](https://github.com/nuinashco/nuikit/blob/main/docs/guide.md) asks.
-
-| skill | use it to |
-|---|---|
-| `add-family` | create a family: `base.py` with base, config and factory, `items/`, the import layer, configs and tests |
-| `add-family-item` | add a kind to a family |
-| `add-config-field` | add a setting: which schema owns it, its default and description, `make configs`, where to change it |
-| `entry-point` | wire a command: validate, log, seed, start the run, build items, report user errors |
-
-It is published through the `nuinashco` marketplace in the conventions repo. Enable it once per machine, ideally in
-user settings; projects from the rnd template already enable it in `.claude/settings.json`.
+The `nuikit` plugin gives Claude skills that write this code the way the guide asks. Install it once per machine;
+projects from rnd-template already turn it on.
 
 ```text
 /plugin marketplace add nuinashco/conventions
 /plugin install nuikit@nuinashco
 ```
 
-## Release
+| skill | use it to |
+|---|---|
+| `add-family` | create a family: base class, config, factory, items, configs and tests |
+| `add-family-item` | add a kind to a family |
+| `add-config-field` | add a setting, with its default and description |
+| `entry-point` | wire a command: validate, log, seed, start the run, report user errors |
 
-Versions follow semver. The public API is every module-level name without a leading underscore in the seven modules
-above, all of them listed in the table. To release, set `version` in `pyproject.toml`, run `uv lock`, commit, then
-push the tag:
+## Related repos
 
-```bash
-git tag v0.1.0 && git push origin v0.1.0
-```
+- [conventions](https://github.com/nuinashco/conventions): the general rules, their checks and the plugin marketplace.
+- [rnd-template](https://github.com/nuinashco/rnd-template): the template that starts a project on nuikit.
 
-`.github/workflows/release.yml` checks that the tag matches `version`, builds with `uv build` and publishes to PyPI
-through trusted publishing, so no API token is stored anywhere. One-time setup before the first tag:
+## Contributing
 
-1. On PyPI, under Account settings > Publishing, add a pending trusted publisher: PyPI project name `nuikit`, owner
-   `nuinashco`, repository `nuikit`, workflow `release.yml`, environment `pypi`. The first release creates the
-   project.
-2. On GitHub, under the repo's Settings > Environments, create the environment `pypi`. Limiting its deployment refs
-   to tags `v*` keeps other refs from publishing.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the architecture, the layout, tests and releases.
+
+## License
+
+[MIT](LICENSE)
