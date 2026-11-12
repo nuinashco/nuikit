@@ -510,12 +510,13 @@ def test_git_failure_inside_a_checkout_is_logged_once_and_recorded_as_null(
         run_dir = start_run(Run(), name="r1", runs_dir=tmp_path / "runs", repo=broken)
 
     [warning] = logs
+    # Git words the error differently from one release to the next.
     assert (
         git_state(run_dir),
         warning["event"],
         warning["log_level"],
         warning["repo"],
-        "nowhere" in warning["error"],
+        bool(warning["error"]) and "\n" not in warning["error"],
     ) == ((None, None), "git_state_unreadable", "warning", str(broken), True)
 
 
