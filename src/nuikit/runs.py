@@ -67,13 +67,16 @@ def start_run(
     Untracked files count as dirty. Both are null without git and outside a
     checkout; when git fails for another reason they are null and a warning is logged.
 
-    A `name` that leaves `runs_dir`, or whose directory exists, is a ConfigError.
+    A `name` that leaves `runs_dir`, names it itself, or whose directory exists, is a
+    ConfigError.
     """
     run_dir = runs_dir / name
     if not run_dir.resolve().is_relative_to(runs_dir.resolve()):
         raise ConfigError(
             f"run name {name} leaves {runs_dir}; pass a run_name that stays inside it"
         )
+    if run_dir.resolve() == runs_dir.resolve():
+        raise ConfigError(f"run name {name!r} names {runs_dir} itself; pass a run_name")
     dumped = _ordered(config, config.model_dump(mode="json"))
     snapshot = OmegaConf.to_yaml(_escaped(dumped))
     provenance = json.dumps(_provenance(config, repo), indent=2, ensure_ascii=False)
@@ -156,7 +159,9 @@ def _ordered(value: object, dumped: _Json) -> _Json:
         pairs = zip(held, dumped.items(), strict=True)
         return {name: _ordered(inner, item) for inner, (name, item) in pairs}
     items = [_ordered(inner, item) for inner, item in zip(held, dumped, strict=True)]
-    return sorted(items, key=json.dumps) if isinstance(value, Set) else items
+    if not isinstance(value, Set):
+        return items
+    return sorted(items, key=lambda item: json.dumps(item, ensure_ascii=False))
 
 
 def _dumped_names(model: type[BaseModel]) -> dict[str, str]:

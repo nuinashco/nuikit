@@ -149,9 +149,14 @@ class ConfigurableFactory[T: Configurable[Any]](BaseFactory[T]):
                 f"registered: {available}"
             )
         kind = data.get("kind")
+        available = ", ".join(cls.list_registered())
         if not kind:
-            available = ", ".join(cls.list_registered())
             raise ConfigError(f"config needs a `kind`; registered: {available}")
+        if not isinstance(kind, str):
+            family = cls._base_type.__name__.lower()
+            raise ConfigError(
+                f"{family} kind is {kind!r}, not a name; registered: {available}"
+            )
         return cls.get_class(kind).Config.model_validate(data)
 
     @classmethod

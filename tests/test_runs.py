@@ -393,6 +393,16 @@ def test_run_name_that_leaves_the_runs_directory_is_refused(tmp_path, name):
     assert not (tmp_path / "escaped").exists()
 
 
+@pytest.mark.parametrize("name", ["", ".", "a/.."], ids=["empty", "dot", "back-up"])
+def test_run_name_that_names_the_runs_directory_itself_is_refused(tmp_path, name):
+    runs_dir = tmp_path / "runs"
+
+    with pytest.raises(ConfigError, match="itself"):
+        start_run(Run(), name=name, runs_dir=runs_dir)
+
+    assert not runs_dir.exists()
+
+
 def test_nested_run_name_stays_inside_the_runs_directory(tmp_path):
     run_dir = start_run(Run(), name="sweep/1", runs_dir=tmp_path)
 

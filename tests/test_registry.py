@@ -71,6 +71,15 @@ def test_family_value_that_is_not_a_mapping_is_a_config_error():
     )
 
 
+def test_kind_that_is_not_a_name_is_a_config_error():
+    with pytest.raises(ConfigError) as error:
+        ShapeFactory.validate({"kind": ["square"]})
+
+    assert str(error.value) == (
+        "shape kind is ['square'], not a name; registered: square"
+    )
+
+
 def test_items_are_slotted_so_attribute_typos_fail():
     square = ShapeFactory.from_config({"kind": "square"})
 
