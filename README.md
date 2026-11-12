@@ -9,16 +9,17 @@ It is for projects that compose their config with [Hydra](https://hydra.cc/). St
 
 ## Install
 
-You need [uv](https://docs.astral.sh/uv/) and Python 3.12 or later. Add nuikit, pinned to a release tag, and Hydra:
+You need [uv](https://docs.astral.sh/uv/) and Python 3.12 or later. Inside a uv project (`uv init` makes one), add
+Hydra first, then nuikit, pinned to a release tag:
 
 ```bash
-uv add git+https://github.com/nuinashco/nuikit --tag v0.1.0
 uv add "hydra-core>=1.4.0rc1"
+uv add git+https://github.com/nuinashco/nuikit --tag v0.1.0
 ```
 
-Hydra is named with its pre-release because nuikit needs OmegaConf 2.4, which Hydra 1.3 does not accept. To mirror
-runs to Weights & Biases, add `--extra wandb` to the first command. torch is optional: `seed_everything` seeds it
-when it is installed.
+Hydra goes first, with its pre-release named: nuikit needs OmegaConf 2.4, which Hydra 1.3 does not accept, so a
+project on Hydra 1.3 must move to the 1.4 pre-release before nuikit can be added. To mirror runs to Weights & Biases,
+add `--extra wandb` to the second command. torch is optional: `seed_everything` seeds it when it is installed.
 
 To move to a newer release, change the tag under `[tool.uv.sources]` in your `pyproject.toml` and run `uv lock`.
 
@@ -51,7 +52,9 @@ def main() -> None:
 main()
 ```
 
-Here the config comes from the command line; in a project it is the one Hydra composed.
+Here the config comes from the command line; in a project it is the one Hydra composed. There `@cli_boundary` sits
+directly on the function, below `@hydra.main`: Hydra catches what the function it wraps raises and exits with 1, so a
+boundary above it reports nothing.
 
 ```console
 $ uv run python train.py steps=500
@@ -73,7 +76,7 @@ $ echo $?
 | `nuikit.registry` | Families: items that register under a `kind` and are built from the config that names it. |
 | `nuikit.errors` | `UserError` with an exit code, and `@cli_boundary`, which prints `error: <message>` instead of a traceback. |
 | `nuikit.logging` | `configure_logging`: readable lines in a terminal, JSON everywhere else. |
-| `nuikit.runs` | `start_run`: a folder per run, with its config and the git commit it ran from. |
+| `nuikit.runs` | `start_run`: a folder per run, with its config (fields typed as secrets masked) and the commit of the checkout it ran from. |
 | `nuikit.seeding` | `seed_everything`: seeds Python, NumPy and torch, and returns the generator to pass around. |
 
 [docs/api.md](docs/api.md) lists every public name and shows a family in one file.

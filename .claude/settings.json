@@ -3,6 +3,10 @@
     "commit": "",
     "sessionUrl": false
   },
+  "enabledPlugins": {
+    "conventions@nuinashco": true,
+    "nuikit@nuinashco": true
+  },
   "extraKnownMarketplaces": {
     "nuinashco": {
       "source": {
@@ -11,9 +15,5 @@
       },
       "autoUpdate": true
     }
-  },
-  "enabledPlugins": {
-    "conventions@nuinashco": true,
-    "nuikit@nuinashco": true
   }
 }

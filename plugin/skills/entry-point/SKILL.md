@@ -18,6 +18,16 @@ RUN-2; conventions ARC-3, ERR-3, ERR-4, LOG-2, LOG-4, DOC-1.
 Hydra serves commands that take a config; a small utility without one is a `click` command, still under
 `@cli_boundary`, like `cli/configs.py` in projects from nuinashco/rnd-template.
 
+Pick the names, then fill every `<...>` in the templates next to this file. Drop `from __future__ import annotations`
+when the project's `requires-python` is 3.14 or later (TYP-3).
+
+| placeholder | is | example |
+|---|---|---|
+| `<pkg>` | the project's import package | `my_pkg` |
+| `<cli>` | the prefix of its console scripts in `[project.scripts]`: the package name with dashes | `my-pkg` |
+| `<command>`, `<Command>` | the command, snake_case and CapWords | `evaluate`, `Evaluate` |
+| `<group>`, `<kind>`, `<Family>` | a family the command builds: its group, its default kind, its base class | `sampler`, `sobol`, `Sampler` |
+
 ## Steps
 
 1. Schema: `<Command>Config(Schema)` in `src/<pkg>/config.py`, with the run fields its mirror needs (`run_name`,
@@ -36,38 +46,19 @@ Hydra serves commands that take a config; a small utility without one is a `clic
      - _self_
    ```
 
-3. `templates/command.py.tmpl` -> `src/<pkg>/cli/<command>.py`; fill every `<...>`, and drop
-   `from __future__ import annotations` when `requires-python` is 3.14 or later (TYP-3). Keep its order:
-   `from_hydra` validates before anything runs and no `DictConfig` goes further (CFG-1); `configure_logging` once
-   (LOG-1); `seed_everything` once, passing the returned `rng` down (RUN-2); build items with
-   `<Family>Factory.from_config(cfg.<group>)` and check that inputs, kinds and credentials work before expensive work
-   (ERR-4); `start_run` (RUN-1); then the work, with outputs written into `run_dir`. `@cli_boundary` sits below
-   `@hydra.main`. To mirror a run to W&B, call
+3. `templates/command.py.tmpl` -> `src/<pkg>/cli/<command>.py`. Keep its order: `from_hydra` validates before anything
+   runs and no `DictConfig` goes further (CFG-1); `configure_logging` once (LOG-1); `seed_everything` once, passing
+   the returned `rng` down (RUN-2); build items with `<Family>Factory.from_config(cfg.<group>)` and check that inputs,
+   kinds and credentials work before expensive work (ERR-4); `start_run` with `repo=paths.ROOT`, the checkout whose
+   commit and dirty flag `run.json` records (RUN-1); then the work, with outputs written into `run_dir`. `@cli_boundary`
+   sits below `@hydra.main`. To mirror a run to W&B, call
    `runs.mirror_to_wandb(cfg, run_dir, project=cfg.wandb_project, entity=cfg.wandb_entity)` after `start_run` when
    `cfg.tracker == "wandb"`; the project then depends on `nuikit[wandb]`.
 4. Register it in `pyproject.toml`: `[project.scripts]` `<cli>-<command> = "<pkg>.cli.<command>:main"`, then
    `uv sync`. Add it to README's command table.
 5. `make configs`; the invariant tests compose and validate the new entry config.
-6. Test the logic in the domain modules it wires. A test of the command itself,
-   `tests/<pkg>/cli/test_<command>.py`, composes the config and calls `main` in process:
-
-   ```python
-   from hydra import compose, initialize_config_dir
-
-   from <pkg> import paths
-   from <pkg>.cli import <command>
-
-
-   def test_<command>_records_its_config_in_the_run_directory(tmp_path, monkeypatch):
-       monkeypatch.setattr(paths, "RUNS_DIR", tmp_path)
-       with initialize_config_dir(str(paths.CONFIGS_DIR)):
-           cfg = compose(config_name="<command>", overrides=["run_name=t"])
-
-       <command>.main(cfg)
-
-       assert (tmp_path / "t" / "config.yaml").is_file()
-   ```
-
+6. Test the logic in the domain modules it wires. A test of the command itself composes the config and calls `main`
+   in process: `templates/test_command.py.tmpl` -> `tests/<pkg>/cli/test_<command>.py`.
 7. `make check`.
 
 ## Errors and output

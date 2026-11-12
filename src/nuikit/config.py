@@ -14,12 +14,19 @@ from nuikit.errors import ConfigError, describe, first_line
 class Schema(BaseModel):
     """Base for config models: unknown keys are errors, values are read-only."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    # YAML and the command line give `run_name=7` as a number.
+    model_config = ConfigDict(extra="forbid", frozen=True, coerce_numbers_to_str=True)
 
     @classmethod
     def from_hydra(cls, cfg: DictConfig) -> Self:
         """Validate a composed Hydra config; raise ConfigError naming bad fields."""
         try:
+            # `to_container` would stop at the first one and name its last segment only.
+            if missing := sorted(OmegaConf.missing_keys(cfg)):
+                raise ConfigError(
+                    f"missing values: {', '.join(missing)}; "
+                    "set them in the entry config or as key=value"
+                )
             data = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
         except OmegaConfBaseException as e:
             raise ConfigError(first_line(e)) from e

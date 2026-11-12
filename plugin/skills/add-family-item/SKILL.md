@@ -1,6 +1,6 @@
 ---
 name: add-family-item
-description: Use when adding a kind to an existing nuikit family in a project, a new implementation that a config `kind` selects (a new endpoint, sampler, metric), or when writing a family's first kind. Creates items/<kind>.py with its config, registers it, regenerates configs and adds its test.
+description: Use when adding a kind to an existing nuikit family in a project, a new implementation that a config `kind` selects (a new endpoint, sampler, metric), or when writing a family's first kind. Creates the kind's module under items/ with its config, registers it, regenerates configs and adds its test.
 paths:
   - "src/**/items/*.py"
   - "src/**/base.py"
@@ -24,6 +24,7 @@ implement. Fill every `<...>` in the templates next to this file; drop `from __f
 | `<method>`, `<Result>` | the abstract method to implement, and its return type | `draw`, `np.ndarray` |
 | `<kind>`, `<Kind>` | the kind, snake_case and CapWords | `sobol`, `Sobol` |
 | `<setting>: <type> = <default>` | its settings, one line each | `scramble: bool = True` |
+| `<behaviour_as_a_sentence>`, `<value>`, `<expected>` | in the test: what it pins as a sentence, a value of the setting, what the method returns for it | for a `constant` kind: `constant_sampler_always_draws_its_value`, `2.0`, `2.0` |
 
 ## Steps
 
@@ -42,7 +43,7 @@ implement. Fill every `<...>` in the templates next to this file; drop `from __f
    (ARC-4).
 4. `make configs` writes `configs/<group>/<kind>.yaml`; the invariant tests build every kind from it. A preset of this
    kind (same kind, other values) is a hand-written file in the group that composes the mirror and never takes a
-   kind's name (CFG-3).
+   kind's name (CFG-3); in a `multiple` family it starts with the mirror's `# @package` line (FAM-4).
 5. `templates/test_item.py.tmpl` -> `tests/<pkg>/<family>/test_<kind>.py`: one sentence-named test per behaviour the
    kind adds, built through `<Family>Factory.from_config` as users build it, with fakes for collaborators (TST-1,
    TST-3); a method that takes an `rng` gets `np.random.default_rng(0)`. Building from the generated YAML is already

@@ -203,7 +203,7 @@ wheels = [
 [[package]]
 name = "conventions-hooks"
 version = "0.1.0"
-source = { git = "https://github.com/nuinashco/conventions?branch=main#1ac9aeb4781a248e586cd813ee6486b294f32c9f" }
+source = { git = "https://github.com/nuinashco/conventions?branch=main#f0623aa70c183a8e80438b0111f12917dcbbe556" }
 dependencies = [
     { name = "attrs" },
 ]
@@ -513,6 +513,7 @@ dependencies = [
     { name = "omegaconf" },
     { name = "pydantic" },
     { name = "pydantic-core" },
+    { name = "pyyaml" },
     { name = "structlog" },
 ]
 
@@ -539,6 +540,7 @@ requires-dist = [
     { name = "omegaconf", specifier = ">=2.4" },
     { name = "pydantic", specifier = ">=2.14" },
     { name = "pydantic-core" },
+    { name = "pyyaml", specifier = ">=5.1" },
     { name = "structlog", specifier = ">=26.1" },
     { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.31" },
 ]

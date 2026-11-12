@@ -31,7 +31,8 @@ make format       # ruff fixes + format
 
 - `src/nuikit/`: `config`, `configgen`, `registry`, `errors`, `logging`, `runs`, `seeding`; the layers contract in
   `pyproject.toml` fixes which may import which.
-- `tests/`: one module per library module, plus `test_plugin.py` for the skills; fakes live in `conftest.py`.
+- `tests/`: one module per library module, plus `test_plugin.py` (skills), `test_docs.py` and `test_imports.py`;
+  fakes live in `conftest.py`.
 - `docs/guide.md`: the nuikit rules; `docs/api.md`: every public name. `plugin/`: `.claude-plugin/plugin.json` and
   `skills/<name>/SKILL.md`.
 - Releases are tags `vX.Y.Z` on `main` matching `version` in `pyproject.toml`; projects install nuikit from the tag.

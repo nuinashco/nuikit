@@ -35,6 +35,8 @@ def main(dict_cfg: DictConfig) -> None:
     configure_logging(level=cfg.log_level, fmt=cfg.log_format)
     rng = seeding.seed_everything(cfg.seed, deterministic=cfg.deterministic)
     <build items from cfg and check inputs, before any expensive work>
-    run_dir = runs.start_run(cfg, name=cfg.run_name, runs_dir=paths.RUNS_DIR)
+    run_dir = runs.start_run(
+        cfg, name=cfg.run_name, runs_dir=paths.RUNS_DIR, repo=paths.ROOT
+    )
     <do the work with rng, writing outputs into run_dir>
     log.info("<command>_finished", run_dir=str(run_dir))
