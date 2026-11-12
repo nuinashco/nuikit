@@ -112,24 +112,34 @@ def mirror_to_wandb(
     group runs; `system_stats` False drops the CPU, memory and GPU charts. The run
     finishes when the process exits. W&B records the command line as typed: a secret
     given there is not masked.
+
+    A W&B login that is missing or refused is a ConfigError.
     """
     import wandb
+    from wandb.errors import AuthenticationError, UsageError
 
-    run = wandb.init(
-        project=project,
-        entity=entity,
-        name=run_dir.name,
-        dir=run_dir,
-        job_type=job_type,
-        group=group,
-        tags=list(tags),
-        config={
-            key: value
-            for key, value in config.model_dump(mode="json").items()
-            if key not in exclude
-        },
-        settings=wandb.Settings(x_disable_stats=not system_stats),
-    )
+    try:
+        run = wandb.init(
+            project=project,
+            entity=entity,
+            name=run_dir.name,
+            dir=run_dir,
+            job_type=job_type,
+            group=group,
+            tags=list(tags),
+            config={
+                key: value
+                for key, value in config.model_dump(mode="json").items()
+                if key not in exclude
+            },
+            settings=wandb.Settings(x_disable_stats=not system_stats),
+        )
+    except (UsageError, AuthenticationError) as e:
+        reason = str(e).partition("\n")[0].rstrip(".")
+        raise ConfigError(
+            f"wandb could not start a run: {reason}; run `wandb login`, set "
+            "WANDB_API_KEY, or set WANDB_MODE=offline and sync later"
+        ) from e
     # Left to W&B's own exit hook, teardown abandons a pending message and logs an
     # error; hooks run last-registered first, so this one runs before it.
     atexit.register(run.finish)

@@ -549,3 +549,25 @@ def test_wandb_mirror_gets_config_without_excluded_keys_and_finishes_at_exit(
         {"x_disable_stats": True},
     )
     assert run.finished
+
+
+@pytest.mark.parametrize(
+    ("error_type", "reason"),
+    [
+        ("UsageError", "No API key configured. Use `wandb login` to log in"),
+        ("AuthenticationError", "API key verification failed"),
+    ],
+    ids=["no-key", "refused-key"],
+)
+def test_wandb_that_cannot_log_in_is_a_config_error(
+    tmp_path, fake_wandb, error_type, reason
+):
+    fake_wandb.refusal = getattr(fake_wandb.errors, error_type)(f"{reason}.")
+
+    with pytest.raises(ConfigError) as error:
+        mirror_to_wandb(Run(), tmp_path / "r1", project="p")
+
+    assert str(error.value) == (
+        f"wandb could not start a run: {reason}; run `wandb login`, set "
+        "WANDB_API_KEY, or set WANDB_MODE=offline and sync later"
+    )
