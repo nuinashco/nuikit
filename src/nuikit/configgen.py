@@ -18,10 +18,13 @@ from pydantic import (
     AliasChoices,
     AliasPath,
     BaseModel,
+    BeforeValidator,
+    PlainValidator,
     Secret,
     SecretBytes,
     SecretStr,
     TypeAdapter,
+    WrapValidator,
 )
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticSerializationError, to_jsonable_python
@@ -59,7 +62,10 @@ def render(file: ConfigFile) -> str:
     """Return the YAML text for one file: every field, its default and description.
 
     Raises ConfigError for a schema that no file can mirror: a default that is a
-    secret, a default factory that fails, or text that Hydra would not load.
+    secret or that pydantic cannot write, or that holds a model whose fields are
+    written under other keys than they are read from; a nested default of a subclass
+    whose fields its field cannot read; a default factory that fails; or text that
+    Hydra would not load.
     """
     name = file.schema.__name__
     lines = [PACKAGE.format(package=file.package)] if file.package else []
@@ -138,14 +144,35 @@ def _fields(
         nested = _model(field.annotation)
         if nested is not None and value is not None:
             yield f"{pad}{_spelled(key)}:{comment}"
-            # A default of a subclass has the fields of its own class.
-            block = type(value) if isinstance(value, BaseModel) else nested
+            block = _block(nested, value, field, where)
             prefix = f"{name}/"
             below = {g.removeprefix(prefix) for g in skip if g.startswith(prefix)}
             inner = _as_values(value)
             yield from _fields(block, inner, indent=indent + 2, skip=below, owner=where)
         else:
             yield f"{pad}{_spelled(key)}: {_scalar(value, where)}{comment}"
+
+
+def _block(
+    nested: type[BaseModel], value: Any, field: FieldInfo, where: str
+) -> type[BaseModel]:
+    """Return the model whose fields a nested default writes: the default's own class.
+
+    Fields a subclass adds reach it from a file only through a validator on the field,
+    as a family's picks the class by `kind`; without one they are refused as unknown.
+    """
+    if not isinstance(value, BaseModel):
+        return nested
+    added = type(value).model_fields.keys() - nested.model_fields.keys()
+    validators = (BeforeValidator, PlainValidator, WrapValidator)
+    if added and not any(isinstance(m, validators) for m in field.metadata):
+        subclass = type(value).__name__
+        raise ConfigError(
+            f"default of {where} is of class {subclass}, which adds "
+            f"{', '.join(sorted(added))}, and a file cannot give them to a field typed "
+            f"{nested.__name__}; type the field {subclass} or make it a family"
+        )
+    return type(value)
 
 
 def _spaced(lines: Iterable[str]) -> Iterator[str]:
@@ -208,7 +235,8 @@ def _default(field: FieldInfo, data: dict[str, Any], where: str) -> Any:
         raise ConfigError(
             f"default factory of {where} fails on the defaults above it: "
             f"{type(e).__name__}: {e}; "
-            "make it read only fields above it that have a default"
+            "make it read only fields above it that have a default and that no "
+            "config group provides"
         ) from e
 
 
@@ -222,6 +250,7 @@ def _as_values(default: Any) -> Mapping[str, Any]:
 def _scalar(value: Any, where: str) -> str:
     if value == REQUIRED:
         return REQUIRED
+    _keys_agree(value, where)
     # A string is written as it stands: `${...}` in it is OmegaConf syntax, which the
     # generated file resolves as an interpolation.
     try:
@@ -261,6 +290,38 @@ def _plain(value: Any, where: str) -> Any:
     if isinstance(value, (list, tuple, deque)):
         return [_plain(item, where) for item in cast("Iterable[Any]", value)]
     return value
+
+
+def _keys_agree(value: Any, where: str) -> None:
+    """Refuse a model in a default that pydantic writes under a key validation skips."""
+    for instance in _models(value):
+        model = type(instance)
+        for name, field in model.model_fields.items():
+            read = _key(name, field, model)
+            written = field.serialization_alias or name
+            if read != written and not field.exclude:
+                raise ConfigError(
+                    f"default of {where} holds model {model.__name__}, whose field "
+                    f"{name} would be written as {written!r} but is read from "
+                    f"{read!r}; give the field one alias for both"
+                )
+
+
+def _models(value: Any) -> Iterator[BaseModel]:
+    """Yield each model in a default, at any depth."""
+    if isinstance(value, BaseModel):
+        yield value
+        items: Iterable[Any] = (getattr(value, n) for n in type(value).model_fields)
+    elif hasattr(value.__class__, "__dataclass_fields__"):
+        items = (getattr(value, n) for n in value.__class__.__dataclass_fields__)
+    elif isinstance(value, Mapping):
+        items = cast("Mapping[Any, Any]", value).values()
+    elif isinstance(value, (list, tuple, deque, set, frozenset)):
+        items = cast("Iterable[Any]", value)
+    else:
+        return
+    for item in items:
+        yield from _models(item)
 
 
 def _holds_set(value: Any) -> bool:

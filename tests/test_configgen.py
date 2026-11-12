@@ -6,13 +6,14 @@ import math
 from collections import deque
 from dataclasses import dataclass  # conventions: TYP-4 - a dataclass default is tested.
 from datetime import timedelta
-from typing import Any
+from typing import Annotated, Any
 
 import pytest
 from omegaconf import DictConfig, OmegaConf
 from pydantic import (
     AliasChoices,
     AliasPath,
+    BeforeValidator,
     ConfigDict,
     Field,
     Secret,
@@ -481,18 +482,24 @@ def test_render_reports_a_default_factory_that_fails_on_the_defaults_above_it():
 
     assert str(error.value) == (
         "default factory of Dependent.run_name fails on the defaults above it: "
-        "KeyError: 'seed'; make it read only fields above it that have a default"
+        "KeyError: 'seed'; make it read only fields above it that have a default and "
+        "that no config group provides"
     )
+
+
+def _tuned_when_retried(data: Any) -> Any:
+    """Build a Tuned from a mapping that sets `retries`, as a family picks by kind."""
+    return Tuned(**data) if isinstance(data, dict) and "retries" in data else data
 
 
 @pytest.mark.parametrize(
     ("annotation", "default", "block"),
     [
         pytest.param(
-            Inner,
+            Annotated[Inner, BeforeValidator(_tuned_when_retried)],
             Field(default_factory=lambda: Tuned(timeout_s=5.0)),
             ["  timeout_s: 5.0  # seconds", "  retries: 5"],
-            id="subclass-instance",
+            id="subclass-a-validator-builds",
         ),
         pytest.param(
             Inner,
@@ -516,3 +523,42 @@ def test_render_writes_a_nested_block_from_the_default_of_its_field(
     text = render(ConfigFile("outer.yaml", outer))
 
     assert text.splitlines()[2:] == ["inner:", *block]
+    assert outer.from_hydra(load(text)) == outer()
+
+
+def test_render_refuses_a_subclass_default_whose_fields_its_field_cannot_read():
+    tuned = Field(default_factory=lambda: Tuned(timeout_s=5.0))
+    outer = create_model("Outer", __base__=Schema, inner=(Inner, tuned))
+
+    with pytest.raises(ConfigError) as error:
+        render(ConfigFile("outer.yaml", outer))
+
+    assert str(error.value) == (
+        "default of Outer.inner is of class Tuned, which adds retries, and a file "
+        "cannot give them to a field typed Inner; type the field Tuned or make it a "
+        "family"
+    )
+
+
+def test_render_writes_models_in_a_list_under_the_keys_validation_reads():
+    listed = create_model(
+        "Listed", __base__=Schema, items=(list[Renamed], [Renamed(schema="y")])
+    )
+
+    text = render(ConfigFile("listed.yaml", listed))
+
+    assert text.splitlines()[2:] == ['items: [{"schema": "y"}]']
+    assert listed.from_hydra(load(text)) == listed()
+
+
+def test_render_refuses_a_model_in_a_default_written_under_a_key_it_is_not_read_from():
+    listed = create_model("Listed", __base__=Schema, items=(list[Aliased], [Aliased()]))
+
+    with pytest.raises(ConfigError) as error:
+        render(ConfigFile("listed.yaml", listed))
+
+    assert str(error.value) == (
+        "default of Listed.items holds model Aliased, whose field size would be "
+        "written as 'shown' but is read from 'batch-size'; give the field one alias "
+        "for both"
+    )
