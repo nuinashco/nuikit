@@ -42,8 +42,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-# Main until the conventions repo tags a release; then pin the tag.
-conventions-hooks = { git = "https://github.com/nuinashco/conventions", branch = "main" }
+conventions-hooks = { git = "https://github.com/nuinashco/conventions", tag = "v0.1.0" }
 
 [build-system]
 requires = ["uv_build>=0.12,<0.14"]
