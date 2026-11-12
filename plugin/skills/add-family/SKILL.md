@@ -1,6 +1,6 @@
 ---
 name: add-family
-description: Use when a project built on nuikit needs a new family, a concept with several interchangeable implementations chosen by a config `kind` (endpoints, samplers, metrics, collectors). Creates base.py with the abstract base, config and factory, items/, the first kind, the import layer, the generated configs and the tests.
+description: Use when a project built on nuikit needs a new family, a concept with several interchangeable implementations chosen by a config `kind` (endpoints, samplers, metrics, collectors). Creates base.py with the abstract base, config and factory, items/, the import layer, the first kind, the generated configs and the tests.
 paths:
   - "src/**/*.py"
   - "configs/**/*.yaml"
@@ -33,10 +33,10 @@ when the project's `requires-python` is 3.14 or later (TYP-3).
    `<Family>Config`.
 2. `templates/items__init__.py.tmpl` -> `src/<pkg>/<family>/items/__init__.py`, and
    `templates/family__init__.py.tmpl` -> `src/<pkg>/<family>/__init__.py`: importing the family registers its kinds.
-3. Add the first kind with the `add-family-item` skill.
-4. Place the family in the layers contract in `pyproject.toml`; the contract is exhaustive, so `make check` fails
+3. Place the family in the layers contract in `pyproject.toml`; the contract is exhaustive, so `make check` fails
    until you do. A domain that imports no other domain joins the domain layer as an independent sibling
    (`"signals | stats | <family>"`); one that imports another sits in a layer above it.
+4. Add the first kind with the `add-family-item` skill.
 5. Select it from the entry config: a field typed as the base config, resolved by `kind` (CFG-8), and left out of the
    entry mirror because the group provides it.
 
@@ -77,8 +77,9 @@ when the project's `requires-python` is 3.14 or later (TYP-3).
 ## Kinds that run together
 
 A family whose kinds all run in one run, such as metrics, sets `multiple = True` on its factory (FAM-4). Each
-generated file then starts with `# @package <group>.<kind>`, the entry config selects a list (`- <group>: [a, b]`,
-overridden as `<group>=[a]`), and the schema field maps each kind to its config:
+generated file then starts with `# @package <group>.<kind>`, and so does a preset that composes it. The entry config
+selects a list (`- <group>: [a, b]`, overridden as `'<group>=[a]'`, quoted because zsh expands square brackets), and
+the schema field maps each kind to its config:
 
 ```python
     <group>: dict[str, SerializeAsAny[<Family>Config]]

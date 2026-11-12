@@ -62,6 +62,15 @@ def test_from_config_validates_against_the_kinds_schema_and_builds_it():
         ShapeFactory.from_config({"kind": "circle"})
 
 
+def test_family_value_that_is_not_a_mapping_is_a_config_error():
+    with pytest.raises(ConfigError) as error:
+        ShapeFactory.validate(2.0)  # pyright: ignore[reportArgumentType]
+
+    assert str(error.value) == (
+        "shape config is 2.0, not a mapping with a `kind`; registered: square"
+    )
+
+
 def test_items_are_slotted_so_attribute_typos_fail():
     square = ShapeFactory.from_config({"kind": "square"})
 

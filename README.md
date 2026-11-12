@@ -9,16 +9,17 @@ It is for projects that compose their config with [Hydra](https://hydra.cc/). St
 
 ## Install
 
-You need [uv](https://docs.astral.sh/uv/) and Python 3.12 or later. Add nuikit, pinned to a release tag, and Hydra:
+You need [uv](https://docs.astral.sh/uv/) and Python 3.12 or later. Inside a uv project (`uv init` makes one), add
+Hydra first, then nuikit, pinned to a release tag:
 
 ```bash
-uv add git+https://github.com/nuinashco/nuikit --tag v0.1.0
 uv add "hydra-core>=1.4.0rc1"
+uv add git+https://github.com/nuinashco/nuikit --tag v0.1.0
 ```
 
-Hydra is named with its pre-release because nuikit needs OmegaConf 2.4, which Hydra 1.3 does not accept. To mirror
-runs to Weights & Biases, add `--extra wandb` to the first command. torch is optional: `seed_everything` seeds it
-when it is installed.
+Hydra goes first, with its pre-release named: nuikit needs OmegaConf 2.4, which Hydra 1.3 does not accept, so a
+project on Hydra 1.3 must move to the 1.4 pre-release before nuikit can be added. To mirror runs to Weights & Biases,
+add `--extra wandb` to the second command. torch is optional: `seed_everything` seeds it when it is installed.
 
 To move to a newer release, change the tag under `[tool.uv.sources]` in your `pyproject.toml` and run `uv lock`.
 

@@ -120,7 +120,8 @@ class ConfigurableFactory[T: Configurable[Any]](BaseFactory[T]):
 
     Set `config_group` to generate `configs/<group>/<kind>.yaml` per kind: the file
     Hydra selects with `<group>=<kind>`. With `multiple`, several kinds are selected
-    at once (`<group>=[a,b]`), each at its own key `<group>.<kind>`.
+    at once (`'<group>=[a,b]'`, quoted because zsh expands square brackets), each at
+    its own key `<group>.<kind>`.
     """
 
     config_group: ClassVar[str | None] = None
@@ -132,6 +133,14 @@ class ConfigurableFactory[T: Configurable[Any]](BaseFactory[T]):
         if isinstance(data, KindConfig):
             schema = cls.get_class(data.kind).Config
             return data if isinstance(data, schema) else schema(**data.model_dump())
+        # Callers pass what the annotation says; a YAML file can hold any value here.
+        if not isinstance(data, Mapping):  # pyright: ignore[reportUnnecessaryIsInstance]
+            family = cls._base_type.__name__.lower()
+            available = ", ".join(cls.list_registered())
+            raise ConfigError(
+                f"{family} config is {data!r}, not a mapping with a `kind`; "
+                f"registered: {available}"
+            )
         kind = data.get("kind")
         if not kind:
             available = ", ".join(cls.list_registered())

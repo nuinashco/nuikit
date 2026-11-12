@@ -61,10 +61,13 @@ plugin/               the Claude Code plugin `nuikit`
 
 ## Tests
 
+`make setup` runs `uv sync` and installs the pre-commit and commit-msg hooks. `make test` runs the unit tests, in
+under a second, and `make check` runs what CI runs: ruff, the conventions checks, import layers, pyright and pytest.
+
 ```bash
-make setup    # uv sync + pre-commit and commit-msg hooks
-make test     # unit tests, under a second
-make check    # ruff, the conventions checks, import layers, pyright, pytest: what CI runs
+make setup
+make test
+make check
 ```
 
 Fakes, not mocks, and they live in `tests/conftest.py`: its `fake_wandb` fixture swaps `wandb` for an in-process

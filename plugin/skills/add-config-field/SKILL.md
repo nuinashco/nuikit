@@ -39,9 +39,19 @@ CFG-1..CFG-7; conventions DOC-7, STY-6, TYP-7.
    )
    ```
 
-4. A secret is typed `SecretStr | None` with default `None` when it is optional, or `SecretStr` with no default when
-   the run needs it. Its value comes from the environment in the hand-written entry config:
-   `api_key: ${oc.env:SERVICE_API_KEY,null}` (CFG-6). The run's `config.yaml` masks it.
+4. A secret is typed `SecretStr | None = None`, also when the run needs it: a secret without a default fails
+   `make check` wherever the variable is not exported, CI included. Its value comes from the environment in the
+   hand-written entry config, never from the command line: `api_key: ${oc.env:SERVICE_API_KEY,null}` (CFG-6). The
+   command that needs it checks it before any work (ERR-4) and names the variable:
+
+   ```python
+   if cfg.api_key is None:
+       raise ConfigError("no service key; set SERVICE_API_KEY in .env")
+   ```
+
+   A test that runs that command sets the variable itself, `monkeypatch.setenv("SERVICE_API_KEY", "test-key")`, so
+   that it passes where none is exported. The run's `config.yaml` masks the secret, and so does the command line that
+   `run.json` records.
 5. Run `make configs`. Mirrors are never edited by hand, and `check-protected` refuses edits to them.
 6. Read the value as `cfg.<field>` in the composition root or `self.config.<field>` in an item, and pass it down as
    an argument. Remove the constant it replaces; constants in code are only facts with a provenance comment (CFG-7).

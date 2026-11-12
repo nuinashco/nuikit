@@ -16,6 +16,13 @@ class Toy(Schema):
     steps: PositiveInt = 1
 
 
+class Nested(Schema):
+    """Config with a nested block."""
+
+    toy: Toy
+    name: str
+
+
 def test_unknown_and_invalid_fields_are_listed_one_per_line():
     with pytest.raises(ConfigError) as error:
         Toy.from_hydra(OmegaConf.create({"steps": 0, "stpes": 2}))
@@ -24,9 +31,18 @@ def test_unknown_and_invalid_fields_are_listed_one_per_line():
     assert [line.split(":")[0].strip() for line in lines[1:]] == ["steps", "stpes"]
 
 
-def test_missing_mandatory_value_is_a_config_error():
-    with pytest.raises(ConfigError, match="steps"):
-        Toy.from_hydra(OmegaConf.create({"steps": "???"}))
+def test_missing_mandatory_values_are_listed_together_by_their_full_keys():
+    with pytest.raises(ConfigError) as error:
+        Nested.from_hydra(OmegaConf.create({"toy": {"steps": "???"}, "name": "???"}))
+
+    assert str(error.value) == (
+        "missing values: name, toy.steps; set them in the entry config or as key=value"
+    )
+
+
+def test_unresolved_interpolation_is_a_config_error():
+    with pytest.raises(ConfigError, match="invalid config"):
+        Toy.from_hydra(OmegaConf.create({"steps": "${nowhere}"}))
 
 
 def test_validated_config_is_read_only():

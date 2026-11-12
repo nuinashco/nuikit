@@ -15,6 +15,7 @@ from omegaconf import OmegaConf
 from nuikit import registry
 
 PLACEHOLDER = re.compile(r"<[^<>\n]+>")
+NAME = re.compile(r"<\w+>")
 NAMES = {
     "<pkg>": "skillcheck",
     "<family>": "samplers",
@@ -76,8 +77,23 @@ def test_skill_names_itself_says_when_to_use_it_and_ships_its_templates(skills, 
     meta = OmegaConf.create(frontmatter)
 
     assert (meta.name, meta.description.startswith("Use when")) == (skill, True)
+    # Claude Code shows `<` and `>` of a description as `&lt;` and `&gt;`.
+    assert not set("<>") & set(meta.description)
     shipped = {p.name for p in (skills / skill).glob("templates/*.tmpl")}
     assert set(re.findall(r"templates/([\w.]+\.tmpl)", body)) == shipped
+
+
+@pytest.mark.parametrize("skill", SKILLS)
+def test_placeholder_table_explains_every_name_of_the_source_templates(skills, skill):
+    body = (skills / skill / "SKILL.md").read_text(encoding="utf-8")
+    table = [line for line in body.splitlines() if line.startswith("| `<")]
+    sources = [
+        path.read_text(encoding="utf-8")
+        for path in (skills / skill).glob("templates/*.tmpl")
+        if not path.name.startswith("test_")
+    ]
+
+    assert set(NAME.findall("".join(sources))) <= set(NAME.findall("".join(table)))
 
 
 def test_family_templates_build_a_family_that_registers_and_generates_configs(family):
@@ -103,9 +119,27 @@ def test_item_test_template_passes_against_the_rendered_family(skills, family):
     module.test_constant_sampler_always_draws_its_value()
 
 
-def test_command_template_is_python_once_filled(skills):
-    template = skills / "entry-point" / "templates" / "command.py.tmpl"
+@pytest.mark.parametrize(
+    ("template", "functions"),
+    [
+        ("command.py.tmpl", ["main"]),
+        (
+            "test_command.py.tmpl",
+            ["test_sample_records_its_config_in_the_run_directory"],
+        ),
+    ],
+)
+def test_entry_point_template_is_python_that_ruff_takes_once_filled(
+    skills, template, functions
+):
+    path = skills / "entry-point" / "templates" / template
 
-    tree = ast.parse(render(template.read_text(encoding="utf-8")))
+    tree = ast.parse(render(path.read_text(encoding="utf-8")))
 
-    assert [n.name for n in tree.body if isinstance(n, ast.FunctionDef)] == ["main"]
+    # A project's ruff asks for the docstring (D100) and, below 3.14, the import (I002).
+    future = tree.body[1]
+    assert (
+        bool(ast.get_docstring(tree)),
+        isinstance(future, ast.ImportFrom) and future.module,
+        [n.name for n in tree.body if isinstance(n, ast.FunctionDef)],
+    ) == (True, "__future__", functions)

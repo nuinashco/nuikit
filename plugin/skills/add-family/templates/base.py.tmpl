@@ -23,6 +23,6 @@ class <Family>[C: <Family>Config](Configurable[C], ABC):
 
 
 class <Family>Factory(ConfigurableFactory[<Family>[Any]]):
-    """Registry of `<group>` kinds; `<group>=<kind>` selects one."""
+    """Registry of `<group>` kinds; `<group>=KIND` selects one."""
 
     config_group = "<group>"

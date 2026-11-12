@@ -1,6 +1,8 @@
 .DEFAULT_GOAL := help
 .PHONY: help setup github lint format typecheck test check
-PYTHON_FILES = $$(git ls-files -co --exclude-standard '*.py')
+# Every Python file git does not ignore, NUL-separated so that a name with a space or a
+# letter outside ASCII reaches the checks whole.
+PYTHON_FILES = git ls-files -z -co --exclude-standard '*.py'
 
 help:  ## show targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -18,8 +20,8 @@ github:  ## once per GitHub repo: squash-merge only, PR title as the commit, mer
 lint:  ## ruff, the conventions checks on every Python file and import layers, no changes
 	uv run ruff check
 	uv run ruff format --check
-	uv run check-comments $(PYTHON_FILES)
-	uv run check-conventions $(PYTHON_FILES)
+	$(PYTHON_FILES) | xargs -0 uv run check-comments
+	$(PYTHON_FILES) | xargs -0 uv run check-conventions
 	uv run lint-imports
 
 format:  ## ruff auto-fix + format
