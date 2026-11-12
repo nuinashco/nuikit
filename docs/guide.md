@@ -125,10 +125,13 @@ field, and validated configs are read-only. Pydantic's default coercion stays on
 
 Defaults live in the schema, and so does what a setting needs explained: a `description` only when the name, type and
 default leave something open (DOC-7). `make configs` renders each schema to a mirror with `nuikit.configgen`: every
-field, its default (or `???`) and its description as a comment, with a blank line after each nested block. Mirrors
-are committed and never edited, so the YAML shows what is tunable without opening Python. An entry config's mirror is
+field, its default (or `???`) and its description as a comment, with a blank line after each nested block. A default
+that holds `${...}` is written as it stands, so the generated file resolves it as an interpolation and code that
+builds the schema directly gets the raw text. A set is written as a sorted list. Mirrors are committed and never
+edited, so the YAML shows what is tunable without opening Python. An entry config's mirror is
 `configs/defaults/<command>.yaml` and leaves out the fields that config groups provide; a family item's mirror is
-`configs/<group>/<kind>.yaml`, the option that `<group>=<kind>` selects. Everything else is hand-written, composes a
+`configs/<group>/<kind>.yaml`, the option that `<group>=<kind>` selects. After a kind is renamed or removed, delete
+its generated file: `make configs` writes files and never removes one. Everything else is hand-written, composes a
 mirror and only sets values: the entry config `configs/<command>.yaml`, whose defaults list picks the mirror, the
 groups and Hydra's settings with `_self_` last, and the presets in each group, which name variants of a kind
 (`configs/endpoint/gemini.yaml` composing `litellm`) and never take a kind's name. A value changes in the narrowest
