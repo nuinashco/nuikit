@@ -1,5 +1,6 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup github lint format typecheck test check build
+.PHONY: help setup github lint format typecheck test check
+PYTHON_FILES = $$(git ls-files -co --exclude-standard '*.py')
 
 help:  ## show targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -14,9 +15,11 @@ github:  ## once per GitHub repo: squash-merge only, PR title as the commit, mer
 		-f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=BLANK \
 		-F delete_branch_on_merge=true
 
-lint:  ## ruff lint + format check and import layers, no changes
+lint:  ## ruff, the conventions checks on every Python file and import layers, no changes
 	uv run ruff check
 	uv run ruff format --check
+	uv run check-comments $(PYTHON_FILES)
+	uv run check-conventions $(PYTHON_FILES)
 	uv run lint-imports
 
 format:  ## ruff auto-fix + format
@@ -30,6 +33,3 @@ test:  ## unit tests
 	uv run pytest
 
 check: lint typecheck test  ## everything CI runs
-
-build:  ## sdist and wheel into dist/
-	uv build

@@ -1,0 +1,122 @@
+# API
+
+Every public name of nuikit: the module-level names without a leading underscore in its seven modules. They are kept
+stable under semver, and until 1.0 a breaking change bumps the minor version. The rules for code that uses them are in
+[guide.md](guide.md).
+
+## nuikit.config
+
+| name | what it is |
+|---|---|
+| `Schema` | Base for config models, a pydantic `BaseModel`: unknown keys are errors and values are read-only. `Schema.from_hydra(cfg)` validates a composed Hydra config and raises one `ConfigError` that names every bad field. |
+
+## nuikit.configgen
+
+The YAML file that mirrors a schema, so that every setting can be read and overridden without opening the code.
+
+| name | what it is |
+|---|---|
+| `ConfigFile` | One generated file: its `path` under the configs directory and its `schema`, plus the config `groups` it leaves out, a fixed `kind` and the `package` it lands at, where those apply. |
+| `render` | `render(file)` returns the YAML text: every field with its default and its description. |
+| `stale` | `stale(files, root)` returns the files under `root` that are missing or differ from their schema. |
+| `write` | `write(files, root)` rewrites the stale files and returns their paths. |
+| `HEADER` | First comment line of a generated file, naming the schema it comes from. |
+| `PACKAGE` | The `# @package` line of a file that lands at another config key than its group's. |
+| `GROUPS` | Comment line listing the config groups whose fields the file leaves out. |
+| `REQUIRED` | `???`, the value written for a field without a default. |
+
+## nuikit.registry
+
+Families: one base class, its items registered under a `kind`, and a factory that builds the item a config names.
+
+| name | what it is |
+|---|---|
+| `KindConfig` | A `Schema` with a `kind` field, which names the registered item to build. |
+| `Configurable` | Base of an item built from one validated config, kept as `self.config`. Its type argument is the item's schema. |
+| `BaseFactory` | Registry of one family, keyed by `kind`: `register`, `get_class`, `create` and `list_registered`. |
+| `ConfigurableFactory` | A `BaseFactory` of `Configurable` items: `validate` picks the schema by `kind`, and `from_config` builds the item. `config_group` names the Hydra group its kinds are generated under; `multiple` lets several be selected at once. |
+| `import_submodules` | `import_submodules(package)` imports every module directly inside a package, so that its items register. |
+| `import_tree` | `import_tree(package)` imports a package and everything below it, except CLIs and `__main__` modules. |
+| `families` | `families(package)` returns the factories of a package that declare a `config_group`. |
+| `config_files` | `config_files(package)` returns the `ConfigFile` of each kind of each family: `<group>/<kind>.yaml`. |
+| `kind_path` | `kind_path(factory, kind)` returns the generated YAML path of a kind, relative to the configs directory. |
+| `kind_package` | `kind_package(factory, kind)` returns the config key a selected kind lands at: `<group>.<kind>`. |
+
+A family in one file (a project splits it into `base.py` and `items/`, FAM-1):
+
+```python
+from abc import ABC, abstractmethod
+from typing import Any
+
+from attrs import define
+
+from nuikit.registry import Configurable, ConfigurableFactory, KindConfig
+
+
+class ShapeConfig(KindConfig):
+    """Settings every shape kind shares."""
+
+
+@define
+class Shape[C: ShapeConfig](Configurable[C], ABC):
+    """Plane figure."""
+
+    @abstractmethod
+    def area(self) -> float: ...
+
+
+class ShapeFactory(ConfigurableFactory[Shape[Any]]):
+    """Registry of shape kinds; `shape=<kind>` selects one."""
+
+    config_group = "shape"
+
+
+class SquareShapeConfig(ShapeConfig):
+    """Settings of the square shape."""
+
+    side_m: float = 1.0
+
+
+@ShapeFactory.register("square")  # Outermost: attrs replaces the class below it.
+@define
+class SquareShape(Shape[SquareShapeConfig]):
+    """Axis-aligned square."""
+
+    def area(self) -> float:
+        return self.config.side_m**2
+
+
+ShapeFactory.from_config({"kind": "square", "side_m": 2}).area()  # 4.0
+```
+
+## nuikit.errors
+
+| name | what it is |
+|---|---|
+| `UserError` | A problem the user can fix. Its `exit_code` is 1. |
+| `ConfigError` | Invalid, incomplete or stale configuration, exit code 2. |
+| `DataError` | Missing, stale or malformed input data, exit code 3. |
+| `cli_boundary` | Decorator for an entry point: prints a user error as `error: <message>` on stderr and exits with its code. pydantic and OmegaConf errors count as config errors; any other exception is a bug and keeps its traceback. |
+| `describe` | `describe(error)` words a pydantic `ValidationError`: the model name, then one line per bad field. |
+| `first_line` | `first_line(error)` words an OmegaConf error, without the lines OmegaConf appends. |
+
+## nuikit.logging
+
+| name | what it is |
+|---|---|
+| `configure_logging` | `configure_logging(level=..., fmt=...)` routes structlog and stdlib loggers through one stderr handler: console lines in a terminal, JSON elsewhere. Call it once, from the entry point. |
+| `LogLevel` | `"debug"`, `"info"`, `"warning"` or `"error"`: the type of `level`, for a config field. |
+| `LogFormat` | `"auto"`, `"console"` or `"json"`: the type of `fmt`, for a config field. |
+
+## nuikit.runs
+
+| name | what it is |
+|---|---|
+| `start_run` | `start_run(config, name=..., runs_dir=...)` creates `runs_dir/name/` with `config.yaml` (secrets masked) and `run.json` (git SHA, dirty flag, argv, start time), and returns the folder. A folder that exists is a `ConfigError`. |
+| `mirror_to_wandb` | `mirror_to_wandb(config, run_dir, project=...)` starts a W&B run named after the run folder, with its config. It needs the `wandb` extra. |
+
+## nuikit.seeding
+
+| name | what it is |
+|---|---|
+| `seed_everything` | `seed_everything(seed, deterministic=...)` seeds Python, NumPy and torch, when torch is installed, and returns the `np.random.Generator` to draw from. `deterministic` also forces deterministic torch kernels, which are slower. |
