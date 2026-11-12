@@ -100,7 +100,6 @@ def test_placeholder_table_explains_every_name_of_the_source_templates(skills, s
     sources = [
         path.read_text(encoding="utf-8")
         for path in (skills / skill).glob("templates/*.tmpl")
-        if not path.name.startswith("test_")
     ]
 
     assert set(NAME.findall("".join(sources))) <= set(NAME.findall("".join(table)))

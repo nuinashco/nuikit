@@ -24,6 +24,7 @@ implement. Fill every `<...>` in the templates next to this file; drop `from __f
 | `<method>`, `<Result>` | the abstract method to implement, and its return type | `draw`, `np.ndarray` |
 | `<kind>`, `<Kind>` | the kind, snake_case and CapWords | `sobol`, `Sobol` |
 | `<setting>: <type> = <default>` | its settings, one line each | `scramble: bool = True` |
+| `<behaviour_as_a_sentence>`, `<value>`, `<expected>` | in the test: what it pins as a sentence, a value of the setting, what the method returns for it | for a `constant` kind: `constant_sampler_always_draws_its_value`, `2.0`, `2.0` |
 
 ## Steps
 

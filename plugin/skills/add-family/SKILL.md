@@ -94,6 +94,9 @@ class MainConfig(Schema):
     ...
     <group>: dict[
         str,
-        Annotated[SerializeAsAny[<Family>Config], BeforeValidator(<Family>Factory.validate)],
+        Annotated[
+            SerializeAsAny[<Family>Config],
+            BeforeValidator(<Family>Factory.validate),
+        ],
     ]
 ```

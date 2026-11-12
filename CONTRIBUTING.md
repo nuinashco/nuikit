@@ -16,7 +16,7 @@ flowchart TD
     logging["logging<br/>configure_logging"]:::side
     seeding["seeding<br/>seed_everything"]:::side
     registry --> configgen & config & errors
-    configgen --> config
+    configgen --> config & errors
     runs --> config & errors
     config --> errors
     pure["teal: decides, same input same output"]:::pure
@@ -61,8 +61,8 @@ plugin/               the Claude Code plugin `nuikit`
 
 ## Tests
 
-`make setup` runs `uv sync` and installs the pre-commit and commit-msg hooks. `make test` runs the unit tests, in
-under a second, and `make check` runs what CI runs: ruff, the conventions checks, import layers, pyright and pytest.
+`make setup` runs `uv sync` and installs the pre-commit and commit-msg hooks. `make test` runs the unit tests, and
+`make check` runs what CI runs: ruff, the conventions checks, import layers, pyright and pytest.
 
 ```bash
 make setup

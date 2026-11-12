@@ -99,7 +99,10 @@ errors of every kind are listed:
 ```python
 metric: dict[
     str,
-    Annotated[SerializeAsAny[MetricConfig], BeforeValidator(MetricFactory.validate)],
+    Annotated[
+        SerializeAsAny[MetricConfig],
+        BeforeValidator(MetricFactory.validate),
+    ],
 ]
 ```
 
@@ -130,7 +133,8 @@ Schemas extend `nuikit.config.Schema` (`extra="forbid"`, `frozen=True`). A typo 
 field, and validated configs are read-only. Read-only is shallow: a list or dict held in a field can still be changed
 in place, so a field that must not change is typed as a tuple or a frozenset. Pydantic's default coercion stays on,
 and a `str` field also takes a number, which is what YAML and the command line make of `run_name=7`; it still refuses
-a boolean.
+a boolean. The text is the number as Python writes it, so `run_name=1.50` gives `1.5`: quote the value to keep what was
+typed, `'run_name="1.50"'`.
 
 *Why:* "it should be possible to detect unused or redundant settings"
 ([Sculley et al. 2015](https://papers.nips.cc/paper_files/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html)).
@@ -142,14 +146,14 @@ a boolean.
 Defaults live in the schema, and so does what a setting needs explained: a `description` only when the name, type and
 default leave something open (DOC-7). `make configs` renders each schema to a mirror with `nuikit.configgen`: every
 field, its default (or `???`) and its description as a comment, with a blank line after each nested block. A default
-that holds `${...}` is written as it stands, so the generated file resolves it as an interpolation and code that
-builds the schema directly gets the raw text. A set is written as a sorted list. Mirrors are committed and never
-edited, so the YAML shows what is tunable without opening Python. An entry config's mirror is
+that holds `${...}` is written as it stands, so the generated file resolves it as an interpolation and code that builds
+the schema directly gets the raw text. A set is written as a list sorted by the JSON text of its items. Mirrors are
+committed and never edited, so the YAML shows what is tunable without opening Python. An entry config's mirror is
 `configs/defaults/<command>.yaml` and leaves out the fields that config groups provide; a family item's mirror is
-`configs/<group>/<kind>.yaml`, the option that `<group>=<kind>` selects. After a kind is renamed or removed, delete
-its generated file: `make configs` writes files and never removes one. Everything else is hand-written, composes a
-mirror and only sets values: the entry config `configs/<command>.yaml`, whose defaults list picks the mirror, the
-groups and Hydra's settings with `_self_` last, and the presets in each group, which name variants of a kind
+`configs/<group>/<kind>.yaml`, the option that `<group>=<kind>` selects. After a kind is renamed or removed, delete its
+generated file: `make configs` writes files and never removes one. Everything else is hand-written, composes a mirror
+and only sets values: the entry config `configs/<command>.yaml`, whose defaults list picks the mirror, the groups and
+Hydra's settings with `_self_` last, and the presets in each group, which name variants of a kind
 (`configs/endpoint/gemini.yaml` composing `litellm`) and never take a kind's name. A value changes in the narrowest
 place that fits:
 
@@ -307,24 +311,24 @@ Every run writes `runs/<run_name>/` containing:
 
 - `config.yaml`: the resolved config with the fields typed as secrets masked (CFG-6). A literal `${` or `???` in a
   string is written escaped (`\${`, `\???`), so that loading the file gives the text that ran and not a new
-  interpolation or a missing value, and a set is written as a sorted list, so that two runs of one config write the
-  same file;
+  interpolation or a missing value, and a set is written as a list sorted by the JSON text of its items, so that two
+  runs of one config write the same file;
 - `run.json`: the commit and the dirty flag of the project's checkout, the start time and argv, the command line with
   the value of every `key=value` that sets a secret masked (CFG-6);
 - the run's outputs.
 
 `nuikit.runs.start_run` writes the first two. The entry point passes `repo=paths.ROOT`, the checkout whose state
-`run.json` records (the working directory when left out). `start_run` reads the commit and the dirty flag there,
-never in the run directory, and before it creates that directory: `runs/` on another disk or inside another
-repository changes neither, and a run cannot make its own record dirty. Untracked files count as dirty, since a new
-module that is not added yet is code that ran. Before the first commit the commit is `null`. Both are `null` without
-git or outside a checkout; when git fails for another reason they are `null` too, and one `git_state_unreadable`
-warning carries the first line of git's error.
+`run.json` records (the working directory when left out). `start_run` reads the commit and the dirty flag there, never
+in the run directory, and before it creates that directory: `runs/` on another disk or inside another repository changes
+neither, and a run cannot make its own record dirty. Untracked files count as dirty, since a new module that is not
+added yet is code that ran, so a project git-ignores `runs/`, or each run after the first is recorded dirty. Before the
+first commit the commit is `null`. Both are `null` without git or outside a checkout; when git fails for another reason
+they are `null` too, and one `git_state_unreadable` warning carries the first line of git's error.
 
-`start_run` refuses a `run_name` that leaves `runs/` and a directory that exists, so each job of a sweep needs its
-own name: `-m seed=1,2 'run_name=sweep_${hydra:job.num}'`. For a single run Hydra writes nothing else; a sweep (`-m`)
-still writes its `multirun.yaml` where `hydra.sweep.dir` points, with the overrides as they were typed. A run
-mirrored to W&B also gives W&B the command line, as typed (CFG-6).
+`start_run` refuses a `run_name` that leaves `runs/` or names it itself, and a directory that exists, so each job of a
+sweep needs its own name: `-m seed=1,2 'run_name=sweep_${hydra:job.num}'`. For a single run Hydra writes nothing else; a
+sweep (`-m`) still writes its `multirun.yaml` and an empty folder per job where `hydra.sweep.dir` points, with the
+overrides as they were typed. A run mirrored to W&B also gives W&B the command line, as typed (CFG-6).
 
 *Why:* any result can be traced back to its code and config.
 
