@@ -65,8 +65,9 @@ def first_line(error: OmegaConfBaseException) -> str:
 
     An error without a message is named by its class.
     """
-    lines = str(error).strip().splitlines()
-    return f"invalid config: {lines[0] if lines else type(error).__name__}"
+    lines = str(error).splitlines()
+    message = lines[0].strip() if lines else ""
+    return f"invalid config: {message or type(error).__name__}"
 
 
 def _exit(message: str, code: int, *, cause: Exception) -> NoReturn:

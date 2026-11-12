@@ -12,7 +12,17 @@ from typing import Any, NewType
 
 import pytest
 from omegaconf import DictConfig, OmegaConf
-from pydantic import Secret, SecretBytes, SecretStr
+from pydantic import (
+    AliasChoices,
+    AliasPath,
+    BaseModel,
+    ConfigDict,
+    Field,
+    RootModel,
+    Secret,
+    SecretBytes,
+    SecretStr,
+)
 from pydantic_core import PydanticSerializationError
 from structlog.testing import capture_logs
 
@@ -45,7 +55,7 @@ class Replica(Schema):
 
 
 class Stack(Schema):
-    """Config with secrets of every type: set, unset, nested, in containers, aliased."""
+    """Config with secrets of every type: set, unset, nested, in containers, renamed."""
 
     api_key: SecretStr
     spare_key: SecretStr | None = None
@@ -61,6 +71,11 @@ class Stack(Schema):
     spare_tokens: tuple[SecretStr, ...] = ()
     groups: dict[str, list[SecretStr]]
     labels: Tree = "none"
+    keyed: SecretStr | None = Field(None, alias="apiKey")
+    chosen: SecretStr | None = Field(
+        None, validation_alias=AliasChoices("authKey", AliasPath("auth", 0))
+    )
+    vaulted: SecretStr | None = Field(None, validation_alias=AliasPath("vault", "key"))
     seed: int = 1
 
 
@@ -105,12 +120,26 @@ class Stage(Schema):
     ids: set[int]
 
 
+class Labels(RootModel[frozenset[str]]):
+    """Set that is a model of its own."""
+
+
+class Owner(BaseModel):
+    """Nested model written under its aliases."""
+
+    model_config = ConfigDict(serialize_by_alias=True)
+
+    team_tags: frozenset[str] = Field(alias="teamTags")
+
+
 class Pipeline(Schema):
-    """Config with sets: of text, in nested schemas and in another set."""
+    """Config with sets: of text, in nested models and in another set."""
 
     tags: frozenset[str]
     stages: dict[str, list[Stage]]
     pairs: frozenset[frozenset[str]]
+    labels: Labels
+    owner: Owner
 
 
 def git(*args: str, cwd: Path) -> str:
@@ -128,13 +157,18 @@ def git_state(run_dir: Path) -> tuple[str | None, bool | None]:
 
 
 @pytest.fixture
-def checkout(tmp_path, monkeypatch) -> Path:
-    """Make a git checkout with one commit, under no git settings but its own."""
+def git_env(monkeypatch) -> None:
+    """Let git read no settings but a repository's own, and find it from its folder."""
     for name in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM"):
         monkeypatch.setenv(name, os.devnull)
     # Inside a git hook these point every git command at the repository it runs for.
     for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def checkout(tmp_path, git_env) -> Path:
+    """Make a git checkout with one commit, under no git settings but its own."""
     root = tmp_path / "code"
     root.mkdir()
     git("init", "--quiet", cwd=root)
@@ -217,6 +251,8 @@ def test_sets_are_written_sorted_by_the_json_text_of_their_items_at_any_depth(
         tags=frozenset("hgfedcba"),
         stages={"fit": [Stage(ids={9, 10, 100})]},
         pairs=frozenset({frozenset("dc"), frozenset("ba")}),
+        labels=Labels(frozenset("zyxwvuts")),
+        owner=Owner(teamTags=frozenset("rqponmlk")),
     )
 
     run_dir = start_run(pipeline, name="r1", runs_dir=tmp_path)
@@ -225,6 +261,8 @@ def test_sets_are_written_sorted_by_the_json_text_of_their_items_at_any_depth(
         "tags": ["a", "b", "c", "d", "e", "f", "g", "h"],
         "stages": {"fit": [{"ids": [10, 100, 9]}]},
         "pairs": [["a", "b"], ["c", "d"]],
+        "labels": ["s", "t", "u", "v", "w", "x", "y", "z"],
+        "owner": {"teamTags": ["k", "l", "m", "n", "o", "p", "q", "r"]},
     }
 
 
@@ -297,6 +335,10 @@ def test_sets_are_written_sorted_by_the_json_text_of_their_items_at_any_depth(
         pytest.param("~spare_pin=sk-1", "~spare_pin=**********", id="deleted-newtype"),
         pytest.param("signing_key=sk-1", "signing_key=**********", id="secret-bytes"),
         pytest.param("passcode=4321", "passcode=**********", id="secret-of-a-number"),
+        pytest.param("apiKey=sk-1", "apiKey=**********", id="field-alias"),
+        pytest.param("authKey=sk-1", "authKey=**********", id="alias-choice"),
+        pytest.param("auth=[sk-1]", "auth=**********", id="alias-path-choice"),
+        pytest.param("vault.key=sk-1", "vault.key=**********", id="alias-path"),
         pytest.param("labels[team]=core", "labels[team]=core", id="bracketed-other"),
         pytest.param("seed=2", "seed=2", id="other-setting"),
         pytest.param("~api_key", "~api_key", id="no-value"),
@@ -393,6 +435,7 @@ def test_run_directory_inside_the_checkout_does_not_make_its_own_record_dirty(
     "changed", ["train.py", "notes.txt"], ids=["tracked-file-edited", "untracked-file"]
 )
 def test_edited_and_untracked_files_make_the_record_dirty(tmp_path, checkout, changed):
+    git("config", "status.showUntrackedFiles", "no", cwd=checkout)
     (checkout / changed).write_text("changed\n")
 
     run_dir = start_run(Run(), name="r1", runs_dir=tmp_path / "runs", repo=checkout)
@@ -414,7 +457,9 @@ def test_checkout_before_its_first_commit_has_no_sha_and_logs_nothing(
     assert (git_state(run_dir), logs) == ((None, True), [])
 
 
-def test_outside_a_checkout_the_git_state_is_null_and_nothing_is_logged(tmp_path):
+def test_outside_a_checkout_the_git_state_is_null_and_nothing_is_logged(
+    tmp_path, git_env
+):
     with capture_logs() as logs:
         run_dir = start_run(Run(), name="r1", runs_dir=tmp_path / "runs", repo=tmp_path)
 
@@ -432,7 +477,22 @@ def test_without_git_the_git_state_is_null_and_nothing_is_logged(
     assert (git_state(run_dir), logs) == ((None, None), [])
 
 
-def test_git_failure_inside_a_checkout_is_logged_once_and_recorded_as_null(tmp_path):
+def test_deleted_working_directory_gives_a_null_git_state(
+    tmp_path, git_env, monkeypatch
+):
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    monkeypatch.chdir(gone)
+    gone.rmdir()
+
+    run_dir = start_run(Run(), name="r1", runs_dir=tmp_path / "runs")
+
+    assert git_state(run_dir) == (None, None)
+
+
+def test_git_failure_inside_a_checkout_is_logged_once_and_recorded_as_null(
+    tmp_path, git_env
+):
     broken = tmp_path / "broken"
     broken.mkdir()
     (broken / ".git").write_text("gitdir: nowhere\n")

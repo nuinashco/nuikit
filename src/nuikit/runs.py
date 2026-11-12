@@ -14,7 +14,16 @@ from typing import NewType, TypeAliasType, cast, get_args, get_origin
 
 import structlog
 from omegaconf import OmegaConf
-from pydantic import BaseModel, Secret, SecretBytes, SecretStr
+from pydantic import (
+    AliasChoices,
+    AliasPath,
+    BaseModel,
+    RootModel,
+    Secret,
+    SecretBytes,
+    SecretStr,
+)
+from pydantic.fields import FieldInfo
 
 from nuikit.config import Schema
 from nuikit.errors import ConfigError
@@ -48,8 +57,10 @@ def start_run(
 
     Only fields typed `SecretStr`, `SecretBytes` or `Secret[...]` are masked, there
     and in the command line that run.json records, where the value of each
-    `key=value` that gives one is masked. A token in a plain `str`, a URL that
-    carries a password or a header in a plain dict is written as it is.
+    `key=value` that gives one is masked, by its name or an alias, except
+    `~key=value` that deletes an item holding a schema with a secret. A token in a
+    plain `str`, a URL that carries a password or a header in a plain dict is
+    written as it is.
 
     run.json also records the commit and the dirty flag of the checkout at `repo`,
     the working directory when None, as they are before the directory is created.
@@ -128,8 +139,11 @@ def _ordered(value: object, dumped: _Json) -> _Json:
     next; sorted by the JSON text of its items, it is written the same every time.
     """
     held: list[object]
+    if isinstance(value, RootModel):
+        return _ordered(cast(RootModel[object], value).root, dumped)
     if isinstance(dumped, dict) and isinstance(value, BaseModel):
-        held = [getattr(value, name, None) for name in dumped]
+        names = _dumped_names(type(value))
+        held = [getattr(value, names.get(key, key), None) for key in dumped]
     elif isinstance(dumped, dict) and isinstance(value, Mapping):
         held = list(cast(Mapping[object, object], value).values())
     elif isinstance(dumped, list) and isinstance(value, (Set, Sequence)):
@@ -143,6 +157,14 @@ def _ordered(value: object, dumped: _Json) -> _Json:
         return {name: _ordered(inner, item) for inner, (name, item) in pairs}
     items = [_ordered(inner, item) for inner, item in zip(held, dumped, strict=True)]
     return sorted(items, key=json.dumps) if isinstance(value, Set) else items
+
+
+def _dumped_names(model: type[BaseModel]) -> dict[str, str]:
+    """Map each key that `model` is dumped under to the name of its field."""
+    if not model.model_config.get("serialize_by_alias"):
+        return {}
+    fields = model.model_fields.items()
+    return {info.serialization_alias or name: name for name, info in fields}
 
 
 def _escaped(dumped: _Json) -> _Json:
@@ -187,7 +209,10 @@ def _git_state(repo: Path | None) -> tuple[str | None, bool | None]:
     except OSError:  # `git` is not installed, or `repo` is not a directory.
         return None, None
     if result.returncode != 0:
-        where = (repo or Path.cwd()).resolve()
+        try:
+            where = (repo or Path.cwd()).resolve()
+        except OSError:  # The working directory was deleted.
+            return None, None
         # Git words "not a git repository" in the user's language, and says it of a
         # broken repository too, so a `.git` entry tells a checkout from the rest.
         if _inside_checkout(where):
@@ -210,9 +235,9 @@ def _masked(argv: Sequence[str], config: Schema) -> list[str]:
     """Return `argv` with the value of each `key=value` that gives a secret masked.
 
     A key gives a secret when, after Hydra's leading `+`, `++` or `~`, one of its
-    segments names a field that holds one, whether the key is spelled with dots or
-    with Hydra's brackets. So does a key above the path of a secret whose value is a
-    mapping.
+    segments names a field that holds one, by its name or an alias, whether the key
+    is spelled with dots or with Hydra's brackets. So does a key above the path of a
+    secret whose value is a mapping.
     """
     secrets = list(_secrets(config))
     paths = {path for path, _ in secrets}
@@ -238,25 +263,41 @@ def _segments(key: str) -> list[str]:
 def _secrets(
     value: object, *, path: tuple[str, ...] = (), field: str = ""
 ) -> Iterator[tuple[str, str]]:
-    """Yield the dotted path of each secret at or below `value`, and its field's name.
+    """Yield the dotted path of each secret at or below `value`, and its field's key.
 
     The field is the innermost schema field on the path: the one that holds the secret,
-    directly or inside mappings and sequences. A field typed for a secret counts
-    whatever it holds: the config no longer holds what `~key=value` deleted.
+    directly or inside mappings and sequences. A field given by its name or by an
+    alias yields a path for each, and the first segment of that key as the field's.
+    A field typed for a secret counts whatever it holds: the config no longer holds
+    what `~key=value` deleted.
     """
     if isinstance(value, _SECRET_TYPES):
         yield ".".join(path), field
     elif isinstance(value, BaseModel):
         for name, info in type(value).model_fields.items():
-            if _typed_secret(info.annotation):
-                yield ".".join((*path, name)), name
-            yield from _secrets(getattr(value, name), path=(*path, name), field=name)
+            held = getattr(value, name)
+            for key in _keys(name, info):
+                if _typed_secret(info.annotation):
+                    yield ".".join((*path, *key)), key[0]
+                yield from _secrets(held, path=(*path, *key), field=key[0])
     elif isinstance(value, Mapping):
         for key, item in cast(Mapping[object, object], value).items():
             yield from _secrets(item, path=(*path, str(key)), field=field)
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         for index, item in enumerate(cast(Sequence[object], value)):
             yield from _secrets(item, path=(*path, str(index)), field=field)
+
+
+def _keys(name: str, info: FieldInfo) -> list[tuple[str, ...]]:
+    """Return the segments of each key a config may give a field by.
+
+    Schema validates by alias, so an alias is the key Hydra composes for the field;
+    a schema that validates by name as well takes the name too.
+    """
+    alias = info.validation_alias
+    choices = alias.choices if isinstance(alias, AliasChoices) else [alias]
+    paths = (c.path if isinstance(c, AliasPath) else [c] for c in choices if c)
+    return [(name,), *(tuple(map(str, path)) for path in paths)]
 
 
 def _typed_secret(annotation: object, *, seen: tuple[object, ...] = ()) -> bool:

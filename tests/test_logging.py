@@ -14,6 +14,13 @@ import structlog
 from nuikit.logging import configure_logging
 
 
+class Shaped:
+    """Value that gives structlog its own form."""
+
+    def __structlog__(self) -> str:
+        return "own form"
+
+
 @pytest.fixture
 def root_logger():
     root = logging.getLogger()
@@ -33,7 +40,7 @@ def test_events_and_foreign_logs_render_as_json_lines(root_logger, capsys):
     assert (second["event"], second["logger"]) == ("plain message", "thirdparty")
 
 
-def test_json_logs_write_numpy_values_and_paths_as_values_and_the_rest_as_repr(
+def test_json_logs_write_numpy_values_and_paths_as_values_and_others_as_structlog_does(
     root_logger, capsys
 ):
     configure_logging(fmt="json")
@@ -45,15 +52,18 @@ def test_json_logs_write_numpy_values_and_paths_as_values_and_the_rest_as_repr(
         bins=np.arange(3),
         out=Path("runs/r1"),
         rate=complex(1, 2),
+        shaped=Shaped(),
     )
 
     event = json.loads(capsys.readouterr().err)
-    assert [event[key] for key in ("loss", "step", "bins", "out", "rate")] == [
+    keys = ("loss", "step", "bins", "out", "rate", "shaped")
+    assert [event[key] for key in keys] == [
         0.5,
         3,
         [0, 1, 2],
         "runs/r1",
         "(1+2j)",
+        "own form",
     ]
 
 

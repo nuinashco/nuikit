@@ -65,10 +65,15 @@ def test_error_of_the_model_as_a_whole_is_its_message_without_a_path(capsys):
     )
 
 
-def test_omegaconf_error_without_a_message_is_named_by_its_class(capsys):
+@pytest.mark.parametrize(
+    "text",
+    ["", "\n    full_key: a.b\n    object_type=dict"],
+    ids=["bare", "with-the-lines-omegaconf-appends"],
+)
+def test_omegaconf_error_without_a_message_is_named_by_its_class(capsys, text):
     @cli_boundary
     def command() -> None:
-        raise OmegaConfBaseException
+        raise OmegaConfBaseException(text)
 
     with pytest.raises(SystemExit) as exit_info:
         command()

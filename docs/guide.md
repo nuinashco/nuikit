@@ -227,11 +227,12 @@ sets the variable itself (`monkeypatch.setenv`).
 
 Masking follows the type and nothing else. Only fields typed `SecretStr`, `SecretBytes` or `Secret[...]` are masked:
 `config.yaml` and the config sent to W&B show `**********` for them, and `run.json` records the command line with the
-value of every `key=value` that sets one masked, however Hydra lets the key be spelled (`tokens.0`, `tokens[0]`). A
-token in a plain `str`, a URL that carries a password or a header in a plain dict is written as it is, so a
-credential is typed as a secret: `SecretStr` for the whole URL, `dict[str, SecretStr]` for headers. W&B records the
-command line as typed, in its files under the run directory (`runs/<run_name>/wandb/`) and in the run it uploads, so
-a secret given there stays unmasked in a mirrored run.
+value of every `key=value` that sets one masked, however Hydra lets the key be spelled (`tokens.0`, `tokens[0]`) and
+whether it gives the field's name or an alias, except `~key=value` that deletes a mapping or list item holding a
+schema with a secret. A token in a plain `str`, a URL that carries a password or a header in a plain dict is written
+as it is, so a credential is typed as a secret: `SecretStr` for the whole URL, `dict[str, SecretStr]` for headers.
+W&B records the command line as typed, in its files under the run directory (`runs/<run_name>/wandb/`) and in the
+run it uploads, so a secret given there stays unmasked in a mirrored run.
 
 *Why:* a secret without a default fails `make check` wherever the variable is not exported, CI included, and the
 error never names the variable. A mask by key name or inside URLs would blank ordinary settings and still miss
@@ -304,9 +305,10 @@ logging.
 
 Every run writes `runs/<run_name>/` containing:
 
-- `config.yaml`: the resolved config with the fields typed as secrets masked (CFG-6). A literal `${` in a string is
-  written escaped (`\${`), so that loading the file gives the text that ran and not a new interpolation, and a set is
-  written as a sorted list, so that two runs of one config write the same file;
+- `config.yaml`: the resolved config with the fields typed as secrets masked (CFG-6). A literal `${` or `???` in a
+  string is written escaped (`\${`, `\???`), so that loading the file gives the text that ran and not a new
+  interpolation or a missing value, and a set is written as a sorted list, so that two runs of one config write the
+  same file;
 - `run.json`: the commit and the dirty flag of the project's checkout, the start time and argv, the command line with
   the value of every `key=value` that sets a secret masked (CFG-6);
 - the run's outputs.
@@ -315,8 +317,9 @@ Every run writes `runs/<run_name>/` containing:
 `run.json` records (the working directory when left out). `start_run` reads the commit and the dirty flag there,
 never in the run directory, and before it creates that directory: `runs/` on another disk or inside another
 repository changes neither, and a run cannot make its own record dirty. Untracked files count as dirty, since a new
-module that is not added yet is code that ran. Both are `null` without git or outside a checkout; when git fails for
-another reason they are `null` too, and one `git_state_unreadable` warning carries the first line of git's error.
+module that is not added yet is code that ran. Before the first commit the commit is `null`. Both are `null` without
+git or outside a checkout; when git fails for another reason they are `null` too, and one `git_state_unreadable`
+warning carries the first line of git's error.
 
 `start_run` refuses a `run_name` that leaves `runs/` and a directory that exists, so each job of a sweep needs its
 own name: `-m seed=1,2 'run_name=sweep_${hydra:job.num}'`. For a single run Hydra writes nothing else; a sweep (`-m`)
