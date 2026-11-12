@@ -1,6 +1,7 @@
 """Families: config-first creation, registration rules, discovery, generated configs."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import sys
 from abc import ABC, abstractmethod
 from typing import Any
@@ -74,7 +75,7 @@ def register_twice() -> None:
 
 def register_below_define() -> None:
     @define
-    @ShapeFactory.register("triangle")
+    @ShapeFactory.register("triangle")  # conventions: FAM-2 - wrong order on purpose.
     class Triangle(Shape[ShapeConfig]):
         """Decorators in the wrong order."""
 

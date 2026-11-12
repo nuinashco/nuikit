@@ -1,0 +1,19 @@
+{
+  "attribution": {
+    "commit": "",
+    "sessionUrl": false
+  },
+  "extraKnownMarketplaces": {
+    "nuinashco": {
+      "source": {
+        "source": "github",
+        "repo": "nuinashco/conventions"
+      },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": {
+    "conventions@nuinashco": true,
+    "nuikit@nuinashco": true
+  }
+}

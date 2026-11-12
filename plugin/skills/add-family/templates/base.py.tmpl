@@ -1,0 +1,28 @@
+"""<Family> family: <what every kind does, in one line>."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any
+
+from attrs import define
+
+from nuikit.registry import Configurable, ConfigurableFactory, KindConfig
+
+
+class <Family>Config(KindConfig):
+    """Settings every `<group>` kind shares."""
+
+
+@define
+class <Family>[C: <Family>Config](Configurable[C], ABC):
+    """<What one item is, as a noun phrase>."""
+
+    @abstractmethod
+    def <method>(self) -> <Result>: ...
+
+
+class <Family>Factory(ConfigurableFactory[<Family>[Any]]):
+    """Registry of `<group>` kinds; `<group>=<kind>` selects one."""
+
+    config_group = "<group>"

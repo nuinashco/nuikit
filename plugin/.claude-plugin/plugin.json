@@ -1,0 +1,12 @@
+{
+  "name": "nuikit",
+  "description": "Skills for projects built on nuikit: add a family or a kind, add a config setting, wire an entry point.",
+  "author": {
+    "name": "Ivan Havlytskyi",
+    "url": "https://github.com/nuinashco"
+  },
+  "homepage": "https://github.com/nuinashco/nuikit",
+  "repository": "https://github.com/nuinashco/nuikit",
+  "license": "MIT",
+  "keywords": ["nuikit", "hydra", "pydantic", "attrs"]
+}

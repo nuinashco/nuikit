@@ -1,6 +1,7 @@
 """Strict, read-only config models validated from Hydra-composed YAML."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 from typing import Self
 
 from omegaconf import DictConfig, OmegaConf

@@ -1,6 +1,7 @@
 """Render config schemas to the YAML files that mirror them."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import json
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path

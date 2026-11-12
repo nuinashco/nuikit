@@ -1,6 +1,7 @@
 """Schema.from_hydra turns every config problem into one ConfigError."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import pytest
 from omegaconf import OmegaConf
 from pydantic import PositiveInt, ValidationError

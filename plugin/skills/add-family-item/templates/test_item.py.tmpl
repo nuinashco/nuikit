@@ -1,0 +1,11 @@
+"""`<kind>` <group>: <the behaviour these tests pin, in one line>."""
+
+from __future__ import annotations
+
+from <pkg>.<family>.base import <Family>Factory
+
+
+def test_<behaviour_as_a_sentence>():
+    <group> = <Family>Factory.from_config({"kind": "<kind>", "<setting>": <value>})
+
+    assert <group>.<method>() == <expected>

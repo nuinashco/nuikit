@@ -1,0 +1,22 @@
+"""`<kind>` <group>: <what sets this kind apart, in one line>."""
+
+from __future__ import annotations
+
+from attrs import define
+
+from <pkg>.<family>.base import <Family>, <Family>Config, <Family>Factory
+
+
+class <Kind><Family>Config(<Family>Config):
+    """Settings of the `<kind>` <group>."""
+
+    <setting>: <type> = <default>
+
+
+@<Family>Factory.register("<kind>")  # Outermost: attrs replaces the class below it.
+@define
+class <Kind><Family>(<Family>[<Kind><Family>Config]):
+    """<What this item is, as a noun phrase>."""
+
+    def <method>(self) -> <Result>:
+        <body reading self.config>

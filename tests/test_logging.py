@@ -1,8 +1,10 @@
-"""Logs from structlog and from stdlib libraries share one JSON renderer."""
+"""Logs from structlog and stdlib share one renderer: console on a TTY, else JSON."""
 
-{% include "shared/python/_future.jinja" %}
+from __future__ import annotations
+
 import json
 import logging
+import sys
 
 import pytest
 import structlog
@@ -27,3 +29,16 @@ def test_events_and_foreign_logs_render_as_json_lines(root_logger, capsys):
     first, second = (json.loads(line) for line in capsys.readouterr().err.splitlines())
     assert (first["event"], first["seed"], first["level"]) == ("run_started", 1, "info")
     assert (second["event"], second["logger"]) == ("plain message", "thirdparty")
+
+
+@pytest.mark.parametrize(("tty", "as_json"), [(True, False), (False, True)])
+def test_auto_format_is_console_on_a_terminal_and_json_elsewhere(
+    root_logger, capsys, monkeypatch, tty, as_json
+):
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: tty)
+    configure_logging(fmt="auto")
+
+    structlog.stdlib.get_logger("app").info("run_started")
+
+    err = capsys.readouterr().err
+    assert ("run_started" in err, err.startswith("{")) == (True, as_json)
