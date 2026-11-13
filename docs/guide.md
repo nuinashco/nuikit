@@ -60,7 +60,14 @@ invariant tests import the whole package (`nuikit.registry.import_tree`), so the
 uses it. `import_tree` reads only folders with an `__init__.py`, so every folder between `<pkg>` and a family has one;
 it never imports `<pkg>.cli` or a `__main__` module.
 
-*Check:* review; `tests/test_registry.py` covers `import_submodules` and `import_tree`.
+Families that share a base, such as rewards and penalties that add up to one score, may share one package. Its
+`base.py` holds the shared base and each family's base, config and factory. Logic over them goes in other modules of
+the package, such as a `scoring.py` that sums the kinds. Each family's kinds sit in a folder named after the family
+(`rewards/`, `penalties/`), whose `__init__.py` calls `import_submodules(__name__)` as `items/__init__.py` does. The
+package's `__init__.py` imports those folders. A family that shares nothing keeps its own package with `items/`.
+
+*Check:* review; `tests/test_registry.py` covers `import_submodules`, `import_tree`, and the discovery of families
+that share a package.
 
 ### FAM-2 MUST
 
