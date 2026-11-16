@@ -74,6 +74,23 @@ when the project's `requires-python` is 3.14 or later (TYP-3).
 7. Add the family to the "Extending" table in CONTRIBUTING.md: what to add, where, what selects it (FAM-5).
 8. `make check`.
 
+## Families that share a base
+
+Two families whose kinds are variants of one thing, such as rewards and penalties that add up to one score, may
+share a package instead of one each (FAM-1):
+
+```text
+src/<pkg>/<package>/
+  __init__.py      imports <family_a> and <family_b>, so importing the package registers every kind
+  base.py          the shared base, then each family's base, config and factory
+  <logic>.py       what works over both, such as a scoring.py that sums the kinds
+  <family_a>/      __init__.py calls import_submodules(__name__); one module per kind
+  <family_b>/      the same
+```
+
+Each factory keeps its own `config_group`, so each family gets its own `configs/<group>/` and is selected on its own.
+A family that shares nothing with another keeps the layout above.
+
 ## Kinds that run together
 
 A family whose kinds all run in one run, such as metrics, sets `multiple = True` on its factory (FAM-4). Each

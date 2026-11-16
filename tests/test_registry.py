@@ -16,6 +16,7 @@ from nuikit.registry import (
     ConfigurableFactory,
     KindConfig,
     config_files,
+    families,
     import_submodules,
     import_tree,
 )
@@ -261,3 +262,87 @@ def test_a_multiple_family_places_each_kind_at_its_own_key(monkeypatch):
     [file] = config_files(ShapeFactory.__module__)
 
     assert (file.path, file.package) == ("eval/shape/square.yaml", "eval.shape.square")
+
+
+SHARED_BASE = """
+from __future__ import annotations
+
+from abc import ABC
+from typing import Any
+
+from attrs import define
+
+from nuikit.registry import Configurable, ConfigurableFactory, KindConfig
+
+
+class TermConfig(KindConfig):
+    pass
+
+
+@define
+class Term(Configurable[TermConfig], ABC):
+    pass
+
+
+@define
+class Reward(Term):
+    pass
+
+
+@define
+class Penalty(Term):
+    pass
+
+
+class RewardFactory(ConfigurableFactory[Reward]):
+    config_group = "reward"
+
+
+class PenaltyFactory(ConfigurableFactory[Penalty]):
+    config_group = "penalty"
+"""
+
+KIND = """
+from attrs import define
+
+from toy_score.base import {family}, {family}Factory
+
+
+@{family}Factory.register("{kind}")
+@define
+class {name}({family}):
+    pass
+"""
+
+
+def test_families_that_share_a_package_are_each_found_with_their_kinds(
+    tmp_path, monkeypatch
+):
+    package = tmp_path / "toy_score"
+    for folder, family, kind in (
+        ("rewards", "Reward", "won"),
+        ("penalties", "Penalty", "late"),
+    ):
+        (package / folder).mkdir(parents=True)
+        (package / folder / "__init__.py").write_text(
+            "from nuikit.registry import import_submodules\n"
+            "import_submodules(__name__)\n"
+        )
+        name = kind.capitalize() + family
+        (package / folder / f"{kind}.py").write_text(
+            KIND.format(family=family, kind=kind, name=name)
+        )
+    (package / "__init__.py").write_text(
+        "from toy_score import penalties as penalties\n"
+        "from toy_score import rewards as rewards\n"
+    )
+    (package / "base.py").write_text(SHARED_BASE)
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    found = families("toy_score")
+
+    assert [factory.config_group for factory in found] == ["penalty", "reward"]
+    assert [file.path for file in config_files("toy_score")] == [
+        "penalty/late.yaml",
+        "reward/won.yaml",
+    ]
