@@ -14,7 +14,7 @@ Hydra first, then nuikit, pinned to a release tag:
 
 ```bash
 uv add "hydra-core>=1.4.0rc1"
-uv add git+https://github.com/nuinashco/nuikit --tag v0.1.0
+uv add git+https://github.com/nuinashco/nuikit --tag v0.1.1
 ```
 
 Hydra goes first, with its pre-release named: nuikit needs OmegaConf 2.4, which Hydra 1.3 does not accept, so a
